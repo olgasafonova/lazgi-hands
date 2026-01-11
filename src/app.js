@@ -41,6 +41,9 @@ async function init() {
     }
   });
 
+  // Connect sound engine to visualizer for equalizer
+  visualizer.setSoundEngine(soundEngine);
+
   // Setup hand tracker
   tracker = new HandTracker({
     onResults: handleHandResults,

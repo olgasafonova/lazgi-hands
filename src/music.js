@@ -25,6 +25,11 @@ export class SoundEngine {
     this.drone = null;
     this.recordedPlayer = null;
     this.isPlayingRecorded = false;
+    this.rhythmPart = null;
+    this.doira = null;
+    this.baseTempo = 100; // BPM
+    this.fft = null;
+    this.fftData = new Float32Array(64);
   }
 
   async start() {
@@ -80,11 +85,105 @@ export class SoundEngine {
     // Start drone on root note
     this.drone.triggerAttack('E2');
 
+    // Setup Doira (frame drum) rhythm
+    this.setupRhythm();
+
+    // Setup FFT analyzer for visualizer
+    this.fft = new Tone.FFT(64);
+    Tone.Destination.connect(this.fft);
+
     this.isStarted = true;
+  }
+
+  /**
+   * Get current FFT frequency data for visualization
+   * Returns array of values from 0-1
+   */
+  getFFTData() {
+    if (!this.fft) return this.fftData;
+
+    const values = this.fft.getValue();
+    for (let i = 0; i < values.length; i++) {
+      // Convert from dB (-100 to 0) to 0-1 range
+      const db = values[i];
+      this.fftData[i] = Math.max(0, Math.min(1, (db + 100) / 100));
+    }
+    return this.fftData;
+  }
+
+  setupRhythm() {
+    // Doira sounds - low "dum" and high "tak"
+    this.doira = {
+      dum: new Tone.MembraneSynth({
+        pitchDecay: 0.05,
+        octaves: 4,
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 }
+      }).toDestination(),
+
+      tak: new Tone.NoiseSynth({
+        noise: { type: 'white' },
+        envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 }
+      }).toDestination(),
+
+      rim: new Tone.MetalSynth({
+        frequency: 400,
+        envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
+        harmonicity: 3.1,
+        modulationIndex: 16,
+        resonance: 4000,
+        octaves: 1
+      }).toDestination()
+    };
+
+    this.doira.dum.volume.value = -8;
+    this.doira.tak.volume.value = -14;
+    this.doira.rim.volume.value = -20;
+
+    // Traditional Lazgi 6/8 pattern
+    // DUM . tak tak DUM tak | DUM . tak tak DUM tak
+    const pattern = [
+      { time: '0:0:0', type: 'dum' },
+      { time: '0:0:2', type: 'tak' },
+      { time: '0:1:0', type: 'tak' },
+      { time: '0:1:2', type: 'dum' },
+      { time: '0:2:0', type: 'tak' },
+      { time: '0:2:2', type: 'rim' },
+      { time: '0:3:0', type: 'dum' },
+      { time: '0:3:2', type: 'tak' },
+      { time: '1:0:0', type: 'tak' },
+      { time: '1:0:2', type: 'dum' },
+      { time: '1:1:0', type: 'tak' },
+      { time: '1:1:2', type: 'rim' },
+    ];
+
+    this.rhythmPart = new Tone.Part((time, event) => {
+      if (event.type === 'dum') {
+        this.doira.dum.triggerAttackRelease('C2', '16n', time);
+      } else if (event.type === 'tak') {
+        this.doira.tak.triggerAttackRelease('16n', time);
+      } else if (event.type === 'rim') {
+        this.doira.rim.triggerAttackRelease('C6', '32n', time);
+      }
+    }, pattern);
+
+    this.rhythmPart.loop = true;
+    this.rhythmPart.loopEnd = '2m';
+
+    // Set tempo and start
+    Tone.Transport.bpm.value = this.baseTempo;
+    this.rhythmPart.start(0);
+    Tone.Transport.start();
   }
 
   stop() {
     if (!this.isStarted) return;
+
+    // Stop rhythm
+    if (this.rhythmPart) {
+      this.rhythmPart.stop();
+      Tone.Transport.stop();
+    }
 
     // Release all notes
     for (const synth of Object.values(this.synths)) {
@@ -142,6 +241,10 @@ export class SoundEngine {
     const wristY = landmarks[0].y;
     const droneVol = -30 + (1 - wristY) * 15; // -30 to -15 dB
     this.drone.volume.rampTo(droneVol, 0.3);
+
+    // Velocity affects tempo (faster hands = faster rhythm)
+    const targetTempo = this.baseTempo + velocity * 40; // 100-140 BPM
+    Tone.Transport.bpm.rampTo(targetTempo, 0.5);
   }
 
   /**
@@ -208,19 +311,22 @@ export class SoundEngine {
    * Source: archive.org - Bobomurod Hamdamov 2007 Urgench Lazgi
    */
   async playRecordedMusic() {
-    if (!this.isStarted) {
-      await Tone.start();
-    }
+    await Tone.start();
 
     if (this.isPlayingRecorded) {
       this.stopRecordedMusic();
       return;
     }
 
+    // Setup FFT if not exists (for visualization)
+    if (!this.fft) {
+      this.fft = new Tone.FFT(64);
+    }
+
     // Create player if not exists
     if (!this.recordedPlayer) {
       this.recordedPlayer = new Tone.Player({
-        url: '/assets/audio/lazgi-khorezm.mp3',
+        url: '/assets/audio/lazgi-trimmed.mp3',
         loop: true,
         autostart: false,
         volume: -6,
@@ -228,6 +334,9 @@ export class SoundEngine {
           console.log('Lazgi music loaded');
         }
       }).toDestination();
+
+      // Connect to FFT for visualization
+      this.recordedPlayer.connect(this.fft);
     }
 
     // Wait for load and play
