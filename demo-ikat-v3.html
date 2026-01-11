@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v3 - Color Bleeding</title>
+  <style>
+    body { margin: 0; background: #0a0a0a; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #ffc107;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v3: Color Bleeding</h2>
+    <p>Colors bleeding into each other at boundaries</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [26, 35, 126],    // indigo
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [0, 131, 143],    // turquoise
+      [106, 27, 154],   // purple
+      [255, 248, 225],  // cream
+    ];
+
+    let stripes = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(10, 10, 10, 12);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 5) {
+          spawnBleedingStripe(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateStripes();
+      drawStripes();
+    }
+
+    function spawnBleedingStripe(x, y) {
+      // Pick two adjacent colors that will bleed into each other
+      const colorIdx1 = floor(random(IKAT_COLORS.length));
+      const colorIdx2 = (colorIdx1 + 1) % IKAT_COLORS.length;
+
+      stripes.push({
+        x: x,
+        y: y,
+        color1: IKAT_COLORS[colorIdx1],
+        color2: IKAT_COLORS[colorIdx2],
+        width: random(15, 35),
+        height: random(40, 80),
+        life: 1,
+        decay: random(0.003, 0.008),
+        bleedAmount: random(0.3, 0.6),  // How much colors blend
+        noiseOffset: random(1000)
+      });
+
+      if (stripes.length > 150) stripes.shift();
+    }
+
+    function updateStripes() {
+      for (let i = stripes.length - 1; i >= 0; i--) {
+        const s = stripes[i];
+        s.life -= s.decay;
+        s.y += 0.3;  // Gentle drift
+
+        if (s.life <= 0) {
+          stripes.splice(i, 1);
+        }
+      }
+    }
+
+    function drawStripes() {
+      for (const s of stripes) {
+        drawBleedingStripe(s);
+      }
+    }
+
+    function drawBleedingStripe(s) {
+      const segments = 20;
+      const segH = s.height / segments;
+
+      for (let i = 0; i < segments; i++) {
+        const y = s.y - s.height/2 + i * segH;
+        const t = i / segments;
+
+        // Blend colors with noise for irregular bleeding
+        const noiseVal = noise(s.noiseOffset + i * 0.3);
+        const blendT = constrain(t + (noiseVal - 0.5) * s.bleedAmount, 0, 1);
+
+        // Interpolate between the two colors
+        const r = lerp(s.color1[0], s.color2[0], blendT);
+        const g = lerp(s.color1[1], s.color2[1], blendT);
+        const b = lerp(s.color1[2], s.color2[2], blendT);
+
+        // Feathered edge width
+        const edgeNoise = noise(s.noiseOffset + i * 0.2 + 100);
+        const segWidth = s.width * (0.7 + edgeNoise * 0.6);
+
+        fill(r, g, b, s.life * 255);
+        rect(s.x - segWidth/2, y, segWidth, segH + 1);
+
+        // Soft blur on edges
+        fill(r, g, b, s.life * 80);
+        rect(s.x - segWidth/2 - 4, y, 4, segH + 1);
+        rect(s.x + segWidth/2, y, 4, segH + 1);
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

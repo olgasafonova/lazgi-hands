@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v2 - Vertical Blur</title>
+  <style>
+    body { margin: 0; background: #0a0a0a; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #ffc107;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v2: Vertical Blur</h2>
+    <p>The characteristic feathered vertical edges</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [26, 35, 126],    // indigo
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [0, 131, 143],    // turquoise
+      [106, 27, 154],   // purple
+    ];
+
+    let particles = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+      prevMouse = { x: mouseX, y: mouseY };
+    }
+
+    function draw() {
+      background(10, 10, 10, 15);
+
+      if (mouseX > 0 && mouseY > 0 && (mouseX !== prevMouse.x || mouseY !== prevMouse.y)) {
+        for (let i = 0; i < 2; i++) {
+          spawnIkatParticle(mouseX, mouseY);
+        }
+        prevMouse = { x: mouseX, y: mouseY };
+      }
+
+      updateParticles();
+      drawParticles();
+    }
+
+    function spawnIkatParticle(x, y) {
+      const color = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+
+      particles.push({
+        x: x + random(-5, 5),
+        y: y,
+        vy: random(-1, 1),
+        width: random(4, 12),
+        height: random(20, 50),  // Elongated vertically
+        color: color,
+        life: 1,
+        decay: random(0.005, 0.015),
+        blurLayers: floor(random(3, 7))  // Multiple blur layers
+      });
+
+      if (particles.length > 200) particles.shift();
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.y += p.vy;
+        p.life -= p.decay;
+        p.height *= 0.99;  // Slowly shrink
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        // Draw multiple offset layers for blur effect
+        for (let layer = p.blurLayers; layer >= 0; layer--) {
+          const layerAlpha = p.life * 255 * (1 - layer / (p.blurLayers + 2));
+          const layerWidth = p.width + layer * 3;
+
+          fill(p.color[0], p.color[1], p.color[2], layerAlpha * 0.4);
+
+          // Jagged/stepped edges - characteristic of Ikat weave
+          drawIkatRect(p.x, p.y, layerWidth, p.height, layer);
+        }
+
+        // Core shape
+        fill(p.color[0], p.color[1], p.color[2], p.life * 255);
+        rect(p.x - p.width/2, p.y - p.height/2, p.width, p.height);
+      }
+    }
+
+    function drawIkatRect(cx, cy, w, h, blurAmount) {
+      // Create stepped/feathered edges
+      const steps = 4 + blurAmount;
+      const stepH = h / steps;
+
+      beginShape();
+      for (let i = 0; i <= steps; i++) {
+        const y = cy - h/2 + i * stepH;
+        const offset = sin(i * PI / steps) * blurAmount * 1.5;
+        vertex(cx - w/2 - offset, y);
+      }
+      for (let i = steps; i >= 0; i--) {
+        const y = cy - h/2 + i * stepH;
+        const offset = sin(i * PI / steps) * blurAmount * 1.5;
+        vertex(cx + w/2 + offset, y);
+      }
+      endShape(CLOSE);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v4 - Diamond Zigzag</title>
+  <style>
+    body { margin: 0; background: #0a0a0a; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #ffc107;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v4: Diamond Zigzag</h2>
+    <p>Geometric diamonds with fuzzy abrash edges</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [26, 35, 126],    // indigo
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [0, 131, 143],    // turquoise
+      [106, 27, 154],   // purple
+    ];
+
+    let diamonds = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(10, 10, 10, 10);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 15) {
+          spawnDiamond(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateDiamonds();
+      drawDiamonds();
+    }
+
+    function spawnDiamond(x, y) {
+      const baseColor = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+
+      diamonds.push({
+        x: x,
+        y: y,
+        color: baseColor,
+        size: random(30, 60),
+        life: 1,
+        decay: random(0.004, 0.01),
+        abrashSeed: random(1000),
+        rotation: random(-0.1, 0.1)
+      });
+
+      if (diamonds.length > 100) diamonds.shift();
+    }
+
+    function updateDiamonds() {
+      for (let i = diamonds.length - 1; i >= 0; i--) {
+        const d = diamonds[i];
+        d.life -= d.decay;
+        d.y += 0.2;
+
+        if (d.life <= 0) {
+          diamonds.splice(i, 1);
+        }
+      }
+    }
+
+    function drawDiamonds() {
+      for (const d of diamonds) {
+        push();
+        translate(d.x, d.y);
+        rotate(d.rotation);
+        drawIkatDiamond(d);
+        pop();
+      }
+    }
+
+    function drawIkatDiamond(d) {
+      const s = d.size;
+      const fuzz = 8; // Edge fuzziness
+
+      // Draw multiple layers for the fuzzy edge effect
+      for (let layer = 3; layer >= 0; layer--) {
+        const layerSize = s + layer * fuzz;
+        const alpha = d.life * (layer === 0 ? 255 : 60 - layer * 15);
+
+        // Abrash - subtle color variation using noise
+        const abrash = noise(d.abrashSeed + layer * 0.5);
+        const r = d.color[0] + (abrash - 0.5) * 40;
+        const g = d.color[1] + (abrash - 0.5) * 40;
+        const b = d.color[2] + (abrash - 0.5) * 40;
+
+        fill(r, g, b, alpha);
+
+        // Draw diamond with stepped/jagged edges
+        beginShape();
+        const steps = 8;
+
+        // Top half - left side going down
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const jitter = layer > 0 ? noise(d.abrashSeed + i) * layer * 2 : 0;
+          const px = -layerSize/2 * (1 - t) - jitter;
+          const py = -layerSize/2 * (1 - t) + layerSize/2 * t;
+          vertex(px, py);
+        }
+
+        // Bottom half - right side going down
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const jitter = layer > 0 ? noise(d.abrashSeed + i + 50) * layer * 2 : 0;
+          const px = layerSize/2 * t + jitter;
+          const py = layerSize/2 * (1 - t);
+          vertex(px, py);
+        }
+
+        // Bottom half - left side going up
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const jitter = layer > 0 ? noise(d.abrashSeed + i + 100) * layer * 2 : 0;
+          const px = layerSize/2 * (1 - t) + jitter;
+          const py = layerSize/2 * (1 - t) - layerSize/2 * t;
+          vertex(px, -py);
+        }
+
+        // Top half - right side going up
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const jitter = layer > 0 ? noise(d.abrashSeed + i + 150) * layer * 2 : 0;
+          const px = -layerSize/2 * t - jitter;
+          const py = -layerSize/2 * t;
+          vertex(px, py);
+        }
+
+        endShape(CLOSE);
+      }
+
+      // Inner diamond detail (common in Uzbek ikat)
+      const innerSize = s * 0.4;
+      fill(10, 10, 10, d.life * 150);
+      beginShape();
+      vertex(0, -innerSize/2);
+      vertex(innerSize/2, 0);
+      vertex(0, innerSize/2);
+      vertex(-innerSize/2, 0);
+      endShape(CLOSE);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

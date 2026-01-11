@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v15 - Multi-Layer Variations</title>
+  <style>
+    body { margin: 0; background: #f5f0e6; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #1a237e;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v15: Multi-Layer</h2>
+    <p>2-5 nested layers per medallion</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [0, 131, 143],    // turquoise
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [106, 27, 154],   // purple
+      [26, 35, 126],    // indigo
+      [233, 30, 99],    // magenta
+      [46, 125, 50],    // green
+      [27, 94, 32],     // dark green
+      [0, 150, 136],    // teal green
+      [33, 150, 243],   // blue
+      [13, 71, 161],    // dark blue
+      [3, 169, 244],    // light blue
+      [20, 20, 20],     // black
+      [250, 250, 250],  // white
+    ];
+
+    const BG_COLOR = [245, 240, 230];
+
+    let medallions = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], 12);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 12) {
+          spawnMedallion(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateMedallions();
+      drawMedallions();
+    }
+
+    function pickUniqueColors(count) {
+      const colors = [];
+      const available = [...IKAT_COLORS];
+
+      for (let i = 0; i < count && available.length > 0; i++) {
+        const idx = floor(random(available.length));
+        colors.push(available.splice(idx, 1)[0]);
+      }
+
+      return colors;
+    }
+
+    function spawnMedallion(x, y) {
+      // 2-5 layers for variety
+      const numLayers = floor(random(2, 6));
+      const colors = pickUniqueColors(numLayers);
+
+      // Base dimensions
+      const ratio = random(2, 3.5);
+      const baseWidth = random(70, 130);
+      const baseHeight = baseWidth * ratio;
+
+      // Generate layers from outside to inside
+      const layers = [];
+      for (let i = 0; i < numLayers; i++) {
+        // Each layer is 50-70% of the previous
+        const scale = i === 0 ? 1 : random(0.5, 0.7);
+        const prevLayer = i === 0 ? { width: baseWidth, height: baseHeight } : layers[i - 1];
+
+        // Slight offset for hand-dyed look
+        const offsetX = random(-2, 2);
+        const offsetY = random(-2, 2);
+
+        layers.push({
+          width: prevLayer.width * scale,
+          height: prevLayer.height * scale,
+          color: colors[i],
+          offsetX: offsetX,
+          offsetY: offsetY
+        });
+      }
+
+      // Sometimes add tiny center diamond
+      const hasCenter = random() < 0.2;
+
+      medallions.push({
+        x: x,
+        y: y,
+        layers: layers,
+        hasCenter: hasCenter,
+        centerColor: hasCenter ? (random() < 0.5 ? BG_COLOR : [255, 215, 0]) : null,
+        life: 1,
+        decay: random(0.002, 0.005)
+      });
+
+      if (medallions.length > 70) medallions.shift();
+    }
+
+    function updateMedallions() {
+      for (let i = medallions.length - 1; i >= 0; i--) {
+        const m = medallions[i];
+        m.life -= m.decay;
+
+        if (m.life <= 0) {
+          medallions.splice(i, 1);
+        }
+      }
+    }
+
+    function drawMedallions() {
+      for (const m of medallions) {
+        drawIkatMedallion(m);
+      }
+    }
+
+    function drawIkatMedallion(m) {
+      const alpha = m.life * 255;
+
+      push();
+      translate(m.x, m.y);
+
+      // Draw layers from outside in
+      for (const layer of m.layers) {
+        push();
+        translate(layer.offsetX, layer.offsetY);
+        drawTexturedMedallion(0, 0, layer.width, layer.height, layer.color, alpha);
+        pop();
+      }
+
+      // Center diamond
+      if (m.hasCenter && m.layers.length > 0) {
+        const innermost = m.layers[m.layers.length - 1];
+        fill(m.centerColor[0], m.centerColor[1], m.centerColor[2], alpha);
+        const cw = innermost.width * 0.4;
+        const ch = innermost.height * 0.25;
+        beginShape();
+        vertex(0, -ch/2);
+        vertex(cw/2, 0);
+        vertex(0, ch/2);
+        vertex(-cw/2, 0);
+        endShape(CLOSE);
+      }
+
+      pop();
+    }
+
+    function drawTexturedMedallion(cx, cy, w, h, baseColor, alpha) {
+      const stripeW = 4;
+      const numStripes = ceil(w / stripeW) + 2;
+
+      for (let i = -numStripes/2; i <= numStripes/2; i++) {
+        const stripeX = i * stripeW;
+        if (abs(stripeX) > w/2 + stripeW) continue;
+
+        // Stripe variation for woven look
+        const stripeBrightness = (i % 2 === 0) ? 0 : 15;
+        // Abrash - irregular dye absorption
+        const abrash = sin(i * 1.7 + w * 0.1) * 12;
+
+        fill(
+          constrain(baseColor[0] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[1] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[2] + stripeBrightness + abrash, 0, 255),
+          alpha
+        );
+
+        const t = abs(stripeX) / (w/2 + 1);
+        const stripeH = h * Math.pow(1 - t, 0.6);
+
+        if (stripeH > 2) {
+          beginShape();
+          vertex(cx + stripeX, cy - stripeH/2);
+          vertex(cx + stripeX + stripeW/2, cy);
+          vertex(cx + stripeX, cy + stripeH/2);
+          vertex(cx + stripeX - stripeW/2, cy);
+          endShape(CLOSE);
+        }
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

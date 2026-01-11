@@ -1,0 +1,26 @@
+{
+  "name": "lazgi-hands",
+  "version": "0.1.0",
+  "description": "Interactive Khorezm Lazgi hand movement visualization with tracking and generative music",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "keywords": [
+    "lazgi",
+    "khorezm",
+    "uzbek",
+    "dance",
+    "mediapipe",
+    "hand-tracking",
+    "creative-coding",
+    "p5js"
+  ],
+  "author": "",
+  "license": "MIT"
+}

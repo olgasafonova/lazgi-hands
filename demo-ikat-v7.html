@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v7 - Vertical Stripes</title>
+  <style>
+    body { margin: 0; background: #f5f0e6; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #1a237e;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v7: Vertical Stripes</h2>
+    <p>Large medallions with warp thread stripes</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [0, 131, 143],    // turquoise
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [106, 27, 154],   // purple
+      [26, 35, 126],    // indigo
+      [233, 30, 99],    // magenta
+    ];
+
+    const BG_COLOR = [245, 240, 230];
+
+    let medallions = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], 12);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 10) {
+          spawnMedallion(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateMedallions();
+      drawMedallions();
+    }
+
+    function spawnMedallion(x, y) {
+      const color1 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      let color2 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+
+      medallions.push({
+        x: x,
+        y: y,
+        color1: color1,
+        color2: color2,
+        width: random(60, 100),      // Bigger
+        height: random(120, 200),    // Taller
+        life: 1,
+        decay: random(0.003, 0.006),
+        stripeWidth: random(3, 6)    // Width of vertical stripes
+      });
+
+      if (medallions.length > 60) medallions.shift();
+    }
+
+    function updateMedallions() {
+      for (let i = medallions.length - 1; i >= 0; i--) {
+        const m = medallions[i];
+        m.life -= m.decay;
+
+        if (m.life <= 0) {
+          medallions.splice(i, 1);
+        }
+      }
+    }
+
+    function drawMedallions() {
+      for (const m of medallions) {
+        drawStripedMedallion(m);
+      }
+    }
+
+    function drawStripedMedallion(m) {
+      const alpha = m.life * 255;
+
+      push();
+      translate(m.x, m.y);
+
+      // Draw medallion as vertical stripes
+      const numStripes = floor(m.width / m.stripeWidth);
+      const halfW = m.width / 2;
+      const halfH = m.height / 2;
+
+      for (let i = 0; i < numStripes; i++) {
+        const stripeX = -halfW + i * m.stripeWidth + m.stripeWidth / 2;
+        const t = abs(stripeX) / halfW;  // 0 at center, 1 at edge
+
+        // Calculate stripe height based on medallion shape (pointed ends)
+        const stripeH = m.height * (1 - Math.pow(t, 0.8));
+
+        // Alternate colors or gradient
+        let col;
+        if (abs(stripeX) < halfW * 0.3) {
+          // Inner stripes - color2 or cream
+          col = i % 3 === 0 ? m.color2 : BG_COLOR;
+        } else if (abs(stripeX) < halfW * 0.7) {
+          // Middle stripes - color1
+          col = m.color1;
+        } else {
+          // Outer stripes - alternate color1 and lighter
+          col = i % 2 === 0 ? m.color1 : [
+            m.color1[0] + 40,
+            m.color1[1] + 40,
+            m.color1[2] + 40
+          ];
+        }
+
+        // Add slight variation for abrash effect
+        const abrash = sin(i * 2.3) * 15;
+
+        fill(
+          constrain(col[0] + abrash, 0, 255),
+          constrain(col[1] + abrash, 0, 255),
+          constrain(col[2] + abrash, 0, 255),
+          alpha
+        );
+
+        // Draw vertical stripe with stepped top/bottom
+        drawStripe(stripeX, 0, m.stripeWidth, stripeH);
+      }
+
+      pop();
+    }
+
+    function drawStripe(x, cy, w, h) {
+      const halfH = h / 2;
+      const steps = 4;
+      const stepH = halfH / steps;
+
+      beginShape();
+
+      // Left edge going down
+      for (let i = 0; i <= steps * 2; i++) {
+        const y = -halfH + i * stepH;
+        // Create stepped edge
+        const inset = i <= steps
+          ? (steps - i) * 1.5   // Top half - gets wider
+          : (i - steps) * 1.5;  // Bottom half - gets narrower
+        vertex(x - w/2 + inset, y);
+      }
+
+      // Right edge going up
+      for (let i = steps * 2; i >= 0; i--) {
+        const y = -halfH + i * stepH;
+        const inset = i <= steps
+          ? (steps - i) * 1.5
+          : (i - steps) * 1.5;
+        vertex(x + w/2 - inset, y);
+      }
+
+      endShape(CLOSE);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

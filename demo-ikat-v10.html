@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v10 - Medallions + Spirals</title>
+  <style>
+    body { margin: 0; background: #f5f0e6; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #1a237e;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v10: Medallions + Spirals</h2>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [0, 131, 143],    // turquoise
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [106, 27, 154],   // purple
+      [26, 35, 126],    // indigo
+      [233, 30, 99],    // magenta
+      [46, 125, 50],    // green
+      [27, 94, 32],     // dark green
+      [0, 150, 136],    // teal green
+      [33, 150, 243],   // blue
+      [13, 71, 161],    // dark blue
+      [3, 169, 244],    // light blue
+      [20, 20, 20],     // black
+      [250, 250, 250],  // white
+    ];
+
+    const BG_COLOR = [245, 240, 230];
+
+    let shapes = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], 10);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 15) {
+          spawnShape(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateShapes();
+      drawShapes();
+    }
+
+    function spawnShape(x, y) {
+      const color1 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      let color2 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      while (color2 === color1) {
+        color2 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      }
+
+      // 60% medallions, 40% spirals
+      const shapeType = random() < 0.6 ? 'medallion' : 'spiral';
+
+      shapes.push({
+        x: x,
+        y: y,
+        type: shapeType,
+        color1: color1,
+        color2: color2,
+        width: random(80, 130),
+        height: random(180, 300),
+        life: 1,
+        decay: random(0.002, 0.005)
+      });
+
+      if (shapes.length > 60) shapes.shift();
+    }
+
+    function updateShapes() {
+      for (let i = shapes.length - 1; i >= 0; i--) {
+        const s = shapes[i];
+        s.life -= s.decay;
+
+        if (s.life <= 0) {
+          shapes.splice(i, 1);
+        }
+      }
+    }
+
+    function drawShapes() {
+      for (const s of shapes) {
+        push();
+        translate(s.x, s.y);
+
+        if (s.type === 'medallion') {
+          drawMedallion(s);
+        } else {
+          drawSpiral(s);
+        }
+
+        pop();
+      }
+    }
+
+    // === MEDALLION ===
+    function drawMedallion(s) {
+      const alpha = s.life * 255;
+      drawTexturedMedallion(0, 0, s.width, s.height, s.color1, alpha);
+      drawTexturedMedallion(0, 0, s.width * 0.5, s.height * 0.55, s.color2, alpha);
+      fill(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], alpha);
+      ellipse(0, 0, s.width * 0.15, s.height * 0.12);
+    }
+
+    function drawTexturedMedallion(cx, cy, w, h, baseColor, alpha) {
+      const stripeW = 4;
+      const numStripes = ceil(w / stripeW) + 2;
+
+      for (let i = -numStripes/2; i <= numStripes/2; i++) {
+        const stripeX = i * stripeW;
+        if (abs(stripeX) > w/2 + stripeW) continue;
+
+        const stripeBrightness = (i % 2 === 0) ? 0 : 20;
+        const abrash = sin(i * 1.7) * 10;
+
+        fill(
+          constrain(baseColor[0] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[1] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[2] + stripeBrightness + abrash, 0, 255),
+          alpha
+        );
+
+        const t = abs(stripeX) / (w/2 + 1);
+        const stripeH = h * Math.pow(1 - t, 0.6);
+
+        if (stripeH > 2) {
+          beginShape();
+          vertex(cx + stripeX, cy - stripeH/2);
+          vertex(cx + stripeX + stripeW/2, cy);
+          vertex(cx + stripeX, cy + stripeH/2);
+          vertex(cx + stripeX - stripeW/2, cy);
+          endShape(CLOSE);
+        }
+      }
+    }
+
+    // === SPIRAL (Ram's horn curls) ===
+    function drawSpiral(s) {
+      const alpha = s.life * 255;
+      const size = s.width * 0.8;
+
+      // Draw mirrored pair of curling horns
+      drawHorn(0, 0, size, s.height * 0.4, s.color1, s.color2, alpha, 1);
+      drawHorn(0, 0, size, s.height * 0.4, s.color1, s.color2, alpha, -1);
+    }
+
+    function drawHorn(cx, cy, w, h, color1, color2, alpha, dir) {
+      // Draw a curling horn shape with vertical stripes
+      const segments = 12;
+      const stripeW = 5;
+
+      for (let seg = 0; seg < segments; seg++) {
+        const t = seg / segments;
+        const nextT = (seg + 1) / segments;
+
+        // Spiral path
+        const angle = t * PI * 1.2;
+        const nextAngle = nextT * PI * 1.2;
+
+        const radius = w * 0.3 + t * w * 0.4;
+        const nextRadius = w * 0.3 + nextT * w * 0.4;
+
+        const x1 = cx + dir * radius * cos(angle - PI/2);
+        const y1 = cy - radius * sin(angle - PI/2) * 0.6 - t * h;
+
+        const x2 = cx + dir * nextRadius * cos(nextAngle - PI/2);
+        const y2 = cy - nextRadius * sin(nextAngle - PI/2) * 0.6 - nextT * h;
+
+        // Thickness decreases toward tip
+        const thickness = h * 0.4 * (1 - t * 0.7);
+
+        // Alternate colors for stripe effect
+        const isOuter = seg % 2 === 0;
+        const col = isOuter ? color1 : color2;
+        const brightness = isOuter ? 0 : 15;
+
+        fill(
+          constrain(col[0] + brightness, 0, 255),
+          constrain(col[1] + brightness, 0, 255),
+          constrain(col[2] + brightness, 0, 255),
+          alpha * (1 - t * 0.2)
+        );
+
+        // Draw segment as quad
+        const perpAngle = angle + PI/2;
+        const dx = cos(perpAngle) * thickness/2 * dir;
+        const dy = sin(perpAngle) * thickness/2 * 0.6;
+
+        beginShape();
+        vertex(x1 - dx, y1 - dy);
+        vertex(x1 + dx, y1 + dy);
+        vertex(x2 + dx * 0.8, y2 + dy * 0.8);
+        vertex(x2 - dx * 0.8, y2 - dy * 0.8);
+        endShape(CLOSE);
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

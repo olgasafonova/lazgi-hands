@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v19 - Complex Shapes</title>
+  <style>
+    body { margin: 0; background: #f5f0e6; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #1a237e;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v19: Complex Shapes</h2>
+    <p>Rhombus, arrow, almond, star, ram's horn</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [0, 131, 143],    // turquoise
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [106, 27, 154],   // purple
+      [26, 35, 126],    // indigo
+      [233, 30, 99],    // magenta
+      [46, 125, 50],    // green
+      [27, 94, 32],     // dark green
+      [0, 150, 136],    // teal green
+      [33, 150, 243],   // blue
+      [13, 71, 161],    // dark blue
+      [3, 169, 244],    // light blue
+      [20, 20, 20],     // black
+      [250, 250, 250],  // white
+    ];
+
+    const BG_COLOR = [245, 240, 230];
+    const SHAPES = ['rhombus', 'arrow', 'almond', 'star', 'ramshorn', 'stepped'];
+
+    let medallions = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], 12);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 15) {
+          spawnMedallion(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateMedallions();
+      drawMedallions();
+    }
+
+    function pickUniqueColors(count) {
+      const colors = [];
+      const available = [...IKAT_COLORS];
+      for (let i = 0; i < count && available.length > 0; i++) {
+        const idx = floor(random(available.length));
+        colors.push(available.splice(idx, 1)[0]);
+      }
+      return colors;
+    }
+
+    function spawnMedallion(x, y) {
+      const shapeType = SHAPES[floor(random(SHAPES.length))];
+      const numLayers = floor(random(2, 5));
+      const colors = pickUniqueColors(numLayers);
+
+      const baseWidth = random(60, 120);
+      const baseHeight = baseWidth * random(1.5, 3);
+
+      const wobbleSeed = random(1000);
+
+      const layers = [];
+      for (let i = 0; i < numLayers; i++) {
+        const scale = i === 0 ? 1 : random(0.5, 0.7);
+        const prevLayer = i === 0 ? { width: baseWidth, height: baseHeight } : layers[i - 1];
+
+        layers.push({
+          width: prevLayer.width * scale,
+          height: prevLayer.height * scale,
+          color: colors[i],
+          offsetX: random(-2, 2),
+          offsetY: random(-2, 2),
+          hasBlur: random() < 0.4,
+          blur: random(4, 8),
+          wobble: random(2, 5),
+          wobbleOffset: random(100)
+        });
+      }
+
+      medallions.push({
+        x: x,
+        y: y,
+        shapeType: shapeType,
+        layers: layers,
+        wobbleSeed: wobbleSeed,
+        rotation: random(-0.15, 0.15),
+        life: 1,
+        decay: random(0.002, 0.005)
+      });
+
+      if (medallions.length > 40) medallions.shift();
+    }
+
+    function updateMedallions() {
+      for (let i = medallions.length - 1; i >= 0; i--) {
+        medallions[i].life -= medallions[i].decay;
+        if (medallions[i].life <= 0) {
+          medallions.splice(i, 1);
+        }
+      }
+    }
+
+    function drawMedallions() {
+      for (const m of medallions) {
+        drawMedallion(m);
+      }
+    }
+
+    function drawMedallion(m) {
+      const alpha = m.life * 255;
+
+      push();
+      translate(m.x, m.y);
+      rotate(m.rotation);
+
+      for (const layer of m.layers) {
+        push();
+        translate(layer.offsetX, layer.offsetY);
+
+        if (layer.hasBlur) {
+          // Blur passes
+          for (let b = 3; b >= 0; b--) {
+            const expand = b * layer.blur * 0.4;
+            const blurAlpha = alpha * (0.1 - b * 0.02);
+            drawShape(m.shapeType, layer.width + expand, layer.height + expand, layer.color, blurAlpha, layer.wobble, m.wobbleSeed + layer.wobbleOffset);
+          }
+        }
+
+        drawShape(m.shapeType, layer.width, layer.height, layer.color, alpha, layer.wobble, m.wobbleSeed + layer.wobbleOffset);
+        pop();
+      }
+
+      pop();
+    }
+
+    function drawShape(type, w, h, color, alpha, wobbleAmt, seed) {
+      switch(type) {
+        case 'rhombus':
+          drawRhombus(w, h, color, alpha, wobbleAmt, seed);
+          break;
+        case 'arrow':
+          drawArrow(w, h, color, alpha, wobbleAmt, seed);
+          break;
+        case 'almond':
+          drawAlmond(w, h, color, alpha, wobbleAmt, seed);
+          break;
+        case 'star':
+          drawStar(w, h, color, alpha, wobbleAmt, seed);
+          break;
+        case 'ramshorn':
+          drawRamsHorn(w, h, color, alpha, wobbleAmt, seed);
+          break;
+        case 'stepped':
+          drawStepped(w, h, color, alpha, wobbleAmt, seed);
+          break;
+      }
+    }
+
+    // Classic rhombus with stripes
+    function drawRhombus(w, h, baseColor, alpha, wobbleAmt, seed) {
+      const stripeW = 4;
+      const numStripes = ceil(w / stripeW) + 2;
+
+      for (let i = -numStripes/2; i <= numStripes/2; i++) {
+        const stripeX = i * stripeW;
+        if (abs(stripeX) > w/2 + stripeW) continue;
+
+        const stripeBrightness = (i % 2 === 0) ? 0 : 15;
+        const abrash = sin(i * 1.7) * 10;
+
+        fill(
+          constrain(baseColor[0] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[1] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[2] + stripeBrightness + abrash, 0, 255),
+          alpha
+        );
+
+        const t = abs(stripeX) / (w/2 + 1);
+        const stripeH = h * Math.pow(1 - t, 0.6);
+
+        if (stripeH > 2) {
+          const wb = [
+            noise(seed + i * 0.5) * wobbleAmt - wobbleAmt/2,
+            noise(seed + i * 0.5 + 10) * wobbleAmt - wobbleAmt/2,
+            noise(seed + i * 0.5 + 20) * wobbleAmt - wobbleAmt/2,
+            noise(seed + i * 0.5 + 30) * wobbleAmt - wobbleAmt/2
+          ];
+
+          beginShape();
+          vertex(stripeX + wb[0], -stripeH/2 + wb[0]*0.3);
+          vertex(stripeX + stripeW/2 + wb[1], wb[1]*0.3);
+          vertex(stripeX + wb[2], stripeH/2 + wb[2]*0.3);
+          vertex(stripeX - stripeW/2 + wb[3], wb[3]*0.3);
+          endShape(CLOSE);
+        }
+      }
+    }
+
+    // Arrow/chevron pointing up
+    function drawArrow(w, h, baseColor, alpha, wobbleAmt, seed) {
+      const notchDepth = h * 0.3;
+
+      fill(baseColor[0], baseColor[1], baseColor[2], alpha);
+
+      beginShape();
+      // Top point
+      vertex(wob(0, seed, 0, wobbleAmt), wob(-h/2, seed, 1, wobbleAmt));
+      // Right edge down
+      vertex(wob(w/2, seed, 2, wobbleAmt), wob(h/2 - notchDepth, seed, 3, wobbleAmt));
+      // Right notch
+      vertex(wob(w/4, seed, 4, wobbleAmt), wob(h/2 - notchDepth, seed, 5, wobbleAmt));
+      // Bottom center notch
+      vertex(wob(0, seed, 6, wobbleAmt), wob(h/2, seed, 7, wobbleAmt));
+      // Left notch
+      vertex(wob(-w/4, seed, 8, wobbleAmt), wob(h/2 - notchDepth, seed, 9, wobbleAmt));
+      // Left edge
+      vertex(wob(-w/2, seed, 10, wobbleAmt), wob(h/2 - notchDepth, seed, 11, wobbleAmt));
+      endShape(CLOSE);
+
+      // Inner stripe detail
+      fill(baseColor[0] + 20, baseColor[1] + 20, baseColor[2] + 20, alpha * 0.7);
+      const s = 0.5;
+      beginShape();
+      vertex(0, -h/2 * s + h*0.1);
+      vertex(w/2 * s, (h/2 - notchDepth) * s + h*0.1);
+      vertex(w/4 * s, (h/2 - notchDepth) * s + h*0.1);
+      vertex(0, h/2 * s + h*0.1);
+      vertex(-w/4 * s, (h/2 - notchDepth) * s + h*0.1);
+      vertex(-w/2 * s, (h/2 - notchDepth) * s + h*0.1);
+      endShape(CLOSE);
+    }
+
+    // Almond / Bodom shape
+    function drawAlmond(w, h, baseColor, alpha, wobbleAmt, seed) {
+      const steps = 20;
+
+      fill(baseColor[0], baseColor[1], baseColor[2], alpha);
+      beginShape();
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const angle = t * TWO_PI;
+        // Almond: pointy top and bottom, wide middle
+        const r = w/2 * (0.3 + 0.7 * pow(sin(angle), 2));
+        const x = r * cos(angle - HALF_PI);
+        const y = h/2 * sin(angle - HALF_PI);
+        const wb = noise(seed + i * 0.3) * wobbleAmt - wobbleAmt/2;
+        vertex(x + wb, y + wb * 0.5);
+      }
+      endShape(CLOSE);
+
+      // Inner almond
+      fill(baseColor[0] + 25, baseColor[1] + 25, baseColor[2] + 25, alpha * 0.8);
+      beginShape();
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const angle = t * TWO_PI;
+        const r = w/2 * 0.5 * (0.3 + 0.7 * pow(sin(angle), 2));
+        const x = r * cos(angle - HALF_PI);
+        const y = h/2 * 0.5 * sin(angle - HALF_PI);
+        vertex(x, y);
+      }
+      endShape(CLOSE);
+    }
+
+    // Eight-pointed star
+    function drawStar(w, h, baseColor, alpha, wobbleAmt, seed) {
+      const points = 8;
+      const outerR = min(w, h) / 2;
+      const innerR = outerR * 0.4;
+
+      fill(baseColor[0], baseColor[1], baseColor[2], alpha);
+      beginShape();
+      for (let i = 0; i < points * 2; i++) {
+        const angle = (i * PI / points) - HALF_PI;
+        const r = (i % 2 === 0) ? outerR : innerR;
+        const x = r * cos(angle);
+        const y = r * sin(angle) * (h / w);
+        const wb = noise(seed + i * 0.4) * wobbleAmt - wobbleAmt/2;
+        vertex(x + wb, y + wb * 0.5);
+      }
+      endShape(CLOSE);
+
+      // Center circle
+      fill(baseColor[0] + 30, baseColor[1] + 30, baseColor[2] + 30, alpha * 0.9);
+      ellipse(0, 0, innerR * 0.8, innerR * 0.8 * (h / w));
+    }
+
+    // Ram's horn / Kochkar - spiral motif
+    function drawRamsHorn(w, h, baseColor, alpha, wobbleAmt, seed) {
+      fill(baseColor[0], baseColor[1], baseColor[2], alpha);
+
+      // Central diamond
+      beginShape();
+      vertex(wob(0, seed, 0, wobbleAmt), wob(-h*0.3, seed, 1, wobbleAmt));
+      vertex(wob(w*0.2, seed, 2, wobbleAmt), wob(0, seed, 3, wobbleAmt));
+      vertex(wob(0, seed, 4, wobbleAmt), wob(h*0.3, seed, 5, wobbleAmt));
+      vertex(wob(-w*0.2, seed, 6, wobbleAmt), wob(0, seed, 7, wobbleAmt));
+      endShape(CLOSE);
+
+      // Left horn curl
+      push();
+      translate(-w*0.25, 0);
+      drawHornCurl(w*0.4, h*0.6, baseColor, alpha, -1, seed);
+      pop();
+
+      // Right horn curl
+      push();
+      translate(w*0.25, 0);
+      drawHornCurl(w*0.4, h*0.6, baseColor, alpha, 1, seed + 50);
+      pop();
+    }
+
+    function drawHornCurl(w, h, baseColor, alpha, dir, seed) {
+      fill(baseColor[0], baseColor[1], baseColor[2], alpha);
+
+      beginShape();
+      const steps = 15;
+      // Outer spiral
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const angle = t * PI * 1.2;
+        const r = w/2 * (1 - t * 0.5);
+        const x = dir * r * cos(angle);
+        const y = -h/2 + r * sin(angle) + t * h * 0.3;
+        vertex(x, y);
+      }
+      // Inner spiral back
+      for (let i = steps; i >= 0; i--) {
+        const t = i / steps;
+        const angle = t * PI * 1.2;
+        const r = w/2 * (1 - t * 0.5) * 0.5;
+        const x = dir * r * cos(angle);
+        const y = -h/2 + r * sin(angle) + t * h * 0.3 + h*0.1;
+        vertex(x, y);
+      }
+      endShape(CLOSE);
+    }
+
+    // Stepped pyramid / ziggurat pattern
+    function drawStepped(w, h, baseColor, alpha, wobbleAmt, seed) {
+      const steps = 4;
+      const stepH = h / (steps * 2);
+
+      fill(baseColor[0], baseColor[1], baseColor[2], alpha);
+
+      beginShape();
+      // Left side going down
+      for (let i = 0; i < steps; i++) {
+        const stepW = w/2 * (1 - i/steps);
+        const y1 = -h/2 + i * stepH;
+        const y2 = y1 + stepH;
+        const wb1 = noise(seed + i) * wobbleAmt - wobbleAmt/2;
+        const wb2 = noise(seed + i + 0.5) * wobbleAmt - wobbleAmt/2;
+        vertex(-stepW + wb1, y1);
+        vertex(-stepW + wb2, y2);
+      }
+
+      // Bottom point
+      vertex(wob(0, seed, 20, wobbleAmt), wob(h/2, seed, 21, wobbleAmt));
+
+      // Right side going up
+      for (let i = steps - 1; i >= 0; i--) {
+        const stepW = w/2 * (1 - i/steps);
+        const y2 = -h/2 + i * stepH + stepH;
+        const y1 = -h/2 + i * stepH;
+        const wb1 = noise(seed + 30 + i) * wobbleAmt - wobbleAmt/2;
+        const wb2 = noise(seed + 30 + i + 0.5) * wobbleAmt - wobbleAmt/2;
+        vertex(stepW + wb1, y2);
+        vertex(stepW + wb2, y1);
+      }
+
+      endShape(CLOSE);
+
+      // Inner stepped shape
+      fill(baseColor[0] + 20, baseColor[1] + 20, baseColor[2] + 20, alpha * 0.7);
+      const s = 0.5;
+      beginShape();
+      for (let i = 0; i < steps; i++) {
+        const stepW = w/2 * s * (1 - i/steps);
+        const y1 = -h/2 * s + i * stepH * s;
+        const y2 = y1 + stepH * s;
+        vertex(-stepW, y1);
+        vertex(-stepW, y2);
+      }
+      vertex(0, h/2 * s);
+      for (let i = steps - 1; i >= 0; i--) {
+        const stepW = w/2 * s * (1 - i/steps);
+        const y2 = -h/2 * s + i * stepH * s + stepH * s;
+        const y1 = -h/2 * s + i * stepH * s;
+        vertex(stepW, y2);
+        vertex(stepW, y1);
+      }
+      endShape(CLOSE);
+    }
+
+    function wob(val, seed, idx, amt) {
+      return val + noise(seed + idx * 0.7) * amt - amt/2;
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

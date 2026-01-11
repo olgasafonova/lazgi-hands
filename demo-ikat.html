@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern Demo - Lazgi Hands</title>
+  <style>
+    body { margin: 0; background: #0a0a0a; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #ffc107;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+    #info h2 { margin: 0 0 10px 0; font-weight: 300; }
+    #info p { margin: 5px 0; opacity: 0.7; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat Pattern Demo</h2>
+    <p>Move mouse to draw</p>
+    <p>Click to change pattern</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    // Ikat color palette from Uzbek textiles
+    const IKAT_COLORS = [
+      [26, 35, 126],    // indigo
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [0, 131, 143],    // turquoise
+      [106, 27, 154],   // purple
+      [46, 125, 50],    // green
+      [255, 248, 225]   // cream
+    ];
+
+    // Pattern types inspired by Ikat motifs
+    const PATTERNS = ['bodom', 'tumorcha', 'chirog', 'ilon_izi', 'oy'];
+    let currentPattern = 0;
+    let particles = [];
+    let trails = [];
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      // Fade effect
+      background(10, 10, 10, 20);
+
+      // Spawn particles at mouse
+      if (mouseX > 0 && mouseY > 0) {
+        for (let i = 0; i < 3; i++) {
+          spawnParticle(mouseX, mouseY);
+        }
+
+        // Add trail point
+        trails.push({
+          x: mouseX,
+          y: mouseY,
+          time: frameCount,
+          color: IKAT_COLORS[frameCount % IKAT_COLORS.length]
+        });
+        if (trails.length > 100) trails.shift();
+      }
+
+      // Draw trails with Ikat blur effect
+      drawIkatTrails();
+
+      // Update and draw particles
+      updateParticles();
+      drawParticles();
+
+      // Draw pattern name
+      fill(255, 193, 7);
+      textSize(16);
+      textAlign(CENTER);
+      text(getPatternName(), width/2, height - 30);
+    }
+
+    function spawnParticle(x, y) {
+      const color = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      const angle = random(TWO_PI);
+      const speed = random(1, 4);
+
+      particles.push({
+        x: x + random(-10, 10),
+        y: y + random(-10, 10),
+        vx: cos(angle) * speed,
+        vy: sin(angle) * speed,
+        size: random(8, 20),
+        color: color,
+        life: 1,
+        decay: random(0.008, 0.02),
+        pattern: PATTERNS[currentPattern],
+        rotation: random(TWO_PI)
+      });
+
+      if (particles.length > 300) particles.shift();
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.03; // light gravity
+        p.life -= p.decay;
+        p.rotation += 0.02;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        push();
+        translate(p.x, p.y);
+        rotate(p.rotation);
+
+        const alpha = p.life * 255;
+
+        // Draw based on pattern type
+        switch(p.pattern) {
+          case 'bodom': // Almond/paisley shape
+            drawBodom(p.size, p.color, alpha);
+            break;
+          case 'tumorcha': // Amulet - diamond
+            drawTumorcha(p.size, p.color, alpha);
+            break;
+          case 'chirog': // Lamp/flame
+            drawChirog(p.size, p.color, alpha);
+            break;
+          case 'ilon_izi': // Snake trail - wavy
+            drawIlonIzi(p.size, p.color, alpha);
+            break;
+          case 'oy': // Moon - crescent
+            drawOy(p.size, p.color, alpha);
+            break;
+        }
+
+        pop();
+      }
+    }
+
+    // Bodom - Almond shape (paisley-like)
+    function drawBodom(size, color, alpha) {
+      fill(color[0], color[1], color[2], alpha);
+      beginShape();
+      for (let a = 0; a < TWO_PI; a += 0.1) {
+        const r = size * (0.5 + 0.5 * cos(a));
+        const x = r * cos(a);
+        const y = r * sin(a) * 0.6;
+        vertex(x, y);
+      }
+      endShape(CLOSE);
+
+      // Ikat blur - offset copy
+      fill(color[0], color[1], color[2], alpha * 0.3);
+      beginShape();
+      for (let a = 0; a < TWO_PI; a += 0.1) {
+        const r = size * (0.5 + 0.5 * cos(a)) * 0.9;
+        const x = r * cos(a) + 2;
+        const y = r * sin(a) * 0.6 + 1;
+        vertex(x, y);
+      }
+      endShape(CLOSE);
+    }
+
+    // Tumorcha - Amulet (diamond)
+    function drawTumorcha(size, color, alpha) {
+      fill(color[0], color[1], color[2], alpha);
+      beginShape();
+      vertex(0, -size/2);
+      vertex(size/3, 0);
+      vertex(0, size/2);
+      vertex(-size/3, 0);
+      endShape(CLOSE);
+
+      // Inner detail
+      fill(10, 10, 10, alpha * 0.5);
+      beginShape();
+      vertex(0, -size/4);
+      vertex(size/6, 0);
+      vertex(0, size/4);
+      vertex(-size/6, 0);
+      endShape(CLOSE);
+
+      // Blur
+      fill(color[0], color[1], color[2], alpha * 0.2);
+      ellipse(2, 1, size * 0.8, size * 0.5);
+    }
+
+    // Chirog - Lamp/flame
+    function drawChirog(size, color, alpha) {
+      fill(color[0], color[1], color[2], alpha);
+      beginShape();
+      vertex(0, -size/2);
+      bezierVertex(size/3, -size/4, size/4, size/4, 0, size/2);
+      bezierVertex(-size/4, size/4, -size/3, -size/4, 0, -size/2);
+      endShape();
+
+      // Inner glow
+      fill(255, 248, 225, alpha * 0.5);
+      ellipse(0, 0, size/3, size/2);
+
+      // Blur
+      fill(color[0], color[1], color[2], alpha * 0.25);
+      ellipse(2, 1, size * 0.7, size);
+    }
+
+    // Ilon Izi - Snake trail (wavy line)
+    function drawIlonIzi(size, color, alpha) {
+      stroke(color[0], color[1], color[2], alpha);
+      strokeWeight(size/4);
+      noFill();
+      beginShape();
+      for (let i = 0; i < 5; i++) {
+        const x = (i - 2) * size/3;
+        const y = sin(i * PI/2) * size/4;
+        curveVertex(x, y);
+      }
+      endShape();
+
+      // Blur
+      stroke(color[0], color[1], color[2], alpha * 0.3);
+      beginShape();
+      for (let i = 0; i < 5; i++) {
+        const x = (i - 2) * size/3 + 2;
+        const y = sin(i * PI/2) * size/4 + 1;
+        curveVertex(x, y);
+      }
+      endShape();
+      noStroke();
+    }
+
+    // Oy - Moon (crescent)
+    function drawOy(size, color, alpha) {
+      fill(color[0], color[1], color[2], alpha);
+      arc(0, 0, size, size, PI/4, PI + 3*PI/4, PIE);
+
+      // Cut out inner circle for crescent
+      fill(10, 10, 10, alpha);
+      ellipse(size/6, -size/6, size * 0.6, size * 0.6);
+
+      // Star accent
+      fill(color[0], color[1], color[2], alpha);
+      drawStar(size/3, -size/3, size/6, 5);
+
+      // Blur
+      fill(color[0], color[1], color[2], alpha * 0.2);
+      arc(2, 1, size * 0.9, size * 0.9, PI/4, PI + 3*PI/4, PIE);
+    }
+
+    function drawStar(x, y, size, points) {
+      push();
+      translate(x, y);
+      beginShape();
+      for (let i = 0; i < points * 2; i++) {
+        const angle = i * PI / points - PI/2;
+        const r = i % 2 === 0 ? size : size/2;
+        vertex(cos(angle) * r, sin(angle) * r);
+      }
+      endShape(CLOSE);
+      pop();
+    }
+
+    function drawIkatTrails() {
+      if (trails.length < 2) return;
+
+      strokeWeight(3);
+      for (let i = 1; i < trails.length; i++) {
+        const t1 = trails[i-1];
+        const t2 = trails[i];
+        const age = (frameCount - t2.time) / 100;
+        const alpha = max(0, 255 * (1 - age));
+
+        // Main stroke
+        stroke(t2.color[0], t2.color[1], t2.color[2], alpha);
+        line(t1.x, t1.y, t2.x, t2.y);
+
+        // Ikat blur - slightly offset duplicate
+        stroke(t2.color[0], t2.color[1], t2.color[2], alpha * 0.3);
+        line(t1.x + 2, t1.y + 1, t2.x + 2, t2.y + 1);
+      }
+      noStroke();
+    }
+
+    function getPatternName() {
+      const names = {
+        'bodom': 'Bodom (Almond)',
+        'tumorcha': 'Tumorcha (Amulet)',
+        'chirog': 'Chirog (Flame)',
+        'ilon_izi': 'Ilon Izi (Snake Trail)',
+        'oy': 'Oy (Moon)'
+      };
+      return names[PATTERNS[currentPattern]];
+    }
+
+    function mousePressed() {
+      currentPattern = (currentPattern + 1) % PATTERNS.length;
+      particles = []; // Clear to show new pattern
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

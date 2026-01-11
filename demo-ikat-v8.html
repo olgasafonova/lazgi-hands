@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v8 - Hybrid</title>
+  <style>
+    body { margin: 0; background: #f5f0e6; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #1a237e;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v8: Hybrid</h2>
+    <p>Big medallions with subtle vertical texture</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [0, 131, 143],    // turquoise
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [106, 27, 154],   // purple
+      [26, 35, 126],    // indigo
+      [233, 30, 99],    // magenta
+      [46, 125, 50],    // green
+      [27, 94, 32],     // dark green
+      [0, 150, 136],    // teal green
+      [33, 150, 243],   // blue
+      [13, 71, 161],    // dark blue
+      [3, 169, 244],    // light blue
+      [20, 20, 20],     // black
+      [250, 250, 250],  // white
+    ];
+
+    const BG_COLOR = [245, 240, 230];
+
+    let medallions = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], 12);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 12) {
+          spawnMedallion(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateMedallions();
+      drawMedallions();
+    }
+
+    function spawnMedallion(x, y) {
+      const color1 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      let color2 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      while (color2 === color1) {
+        color2 = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+      }
+
+      medallions.push({
+        x: x,
+        y: y,
+        color1: color1,
+        color2: color2,
+        width: random(80, 130),
+        height: random(180, 300),
+        life: 1,
+        decay: random(0.002, 0.005),
+        steps: floor(random(10, 18))
+      });
+
+      if (medallions.length > 70) medallions.shift();
+    }
+
+    function updateMedallions() {
+      for (let i = medallions.length - 1; i >= 0; i--) {
+        const m = medallions[i];
+        m.life -= m.decay;
+
+        if (m.life <= 0) {
+          medallions.splice(i, 1);
+        }
+      }
+    }
+
+    function drawMedallions() {
+      for (const m of medallions) {
+        drawIkatMedallion(m);
+      }
+    }
+
+    function drawIkatMedallion(m) {
+      const alpha = m.life * 255;
+
+      push();
+      translate(m.x, m.y);
+
+      // Outer medallion with vertical stripe texture
+      drawTexturedMedallion(0, 0, m.width, m.height, m.color1, alpha, m.steps);
+
+      // Inner medallion
+      drawTexturedMedallion(0, 0, m.width * 0.5, m.height * 0.55, m.color2, alpha, m.steps - 3);
+
+      // Center - cream/background
+      fill(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], alpha);
+      drawSteppedMedallion(0, 0, m.width * 0.15, m.height * 0.2, 4);
+
+      pop();
+    }
+
+    function drawTexturedMedallion(cx, cy, w, h, baseColor, alpha, steps) {
+      // Draw medallion shape with vertical stripe texture inside
+      const stripeW = 4;
+      const numStripes = ceil(w / stripeW) + 2;
+
+      for (let i = -numStripes/2; i <= numStripes/2; i++) {
+        const stripeX = i * stripeW;
+
+        // Skip if outside medallion width
+        if (abs(stripeX) > w/2 + stripeW) continue;
+
+        // Color variation for vertical stripe effect
+        const stripeBrightness = (i % 2 === 0) ? 0 : 20;
+        const abrash = sin(i * 1.7) * 10;
+
+        fill(
+          constrain(baseColor[0] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[1] + stripeBrightness + abrash, 0, 255),
+          constrain(baseColor[2] + stripeBrightness + abrash, 0, 255),
+          alpha
+        );
+
+        // Calculate height of this stripe based on medallion shape
+        const t = abs(stripeX) / (w/2 + 1);
+        const stripeH = h * Math.pow(1 - t, 0.6);
+
+        if (stripeH > 2) {
+          drawSingleStripe(cx + stripeX, cy, stripeW + 1, stripeH, steps);
+        }
+      }
+    }
+
+    function drawSingleStripe(cx, cy, w, h, steps) {
+      const halfH = h / 2;
+      const stepH = h / steps;
+
+      beginShape();
+
+      // Build stepped edge shape for this stripe
+      // Top point
+      vertex(cx, cy - halfH);
+
+      // Right side going down
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const y = cy - halfH + t * h;
+        const widthAtPoint = w/2 * sin(t * PI);  // Bulge in middle
+        const jitter = sin(i * 2.1) * 1;
+        vertex(cx + widthAtPoint + jitter, y);
+      }
+
+      // Bottom point
+      vertex(cx, cy + halfH);
+
+      // Left side going up
+      for (let i = steps - 1; i >= 1; i--) {
+        const t = i / steps;
+        const y = cy - halfH + t * h;
+        const widthAtPoint = w/2 * sin(t * PI);
+        const jitter = sin(i * 2.1 + 0.5) * 1;
+        vertex(cx - widthAtPoint - jitter, y);
+      }
+
+      endShape(CLOSE);
+    }
+
+    function drawSteppedMedallion(cx, cy, w, h, steps) {
+      const halfH = h / 2;
+
+      beginShape();
+      vertex(cx, cy - halfH);
+
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const y = cy - halfH + t * halfH;
+        const widthAtStep = w/2 * Math.pow(t, 0.7);
+        vertex(cx + widthAtStep, y);
+      }
+
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const y = cy + t * halfH;
+        const widthAtStep = w/2 * Math.pow(1 - t, 0.7);
+        vertex(cx + widthAtStep, y);
+      }
+
+      vertex(cx, cy + halfH);
+
+      for (let i = steps; i >= 0; i--) {
+        const t = i / steps;
+        const y = cy + t * halfH;
+        const widthAtStep = w/2 * Math.pow(1 - t, 0.7);
+        vertex(cx - widthAtStep, y);
+      }
+
+      for (let i = steps; i >= 1; i--) {
+        const t = i / steps;
+        const y = cy - halfH + t * halfH;
+        const widthAtStep = w/2 * Math.pow(t, 0.7);
+        vertex(cx - widthAtStep, y);
+      }
+
+      endShape(CLOSE);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

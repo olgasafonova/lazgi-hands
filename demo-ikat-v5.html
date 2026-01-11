@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ikat Pattern v5 - Cloud Blobs (Abrband)</title>
+  <style>
+    body { margin: 0; background: #0a0a0a; overflow: hidden; }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #ffc107;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>Ikat v5: Abrband (Cloud Tying)</h2>
+    <p>Soft organic shapes like dye bleeding through cloth</p>
+    <p>Move mouse to draw</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    const IKAT_COLORS = [
+      [26, 35, 126],    // indigo
+      [183, 28, 28],    // crimson
+      [255, 193, 7],    // gold
+      [0, 131, 143],    // turquoise
+      [106, 27, 154],   // purple
+    ];
+
+    let clouds = [];
+    let prevMouse = { x: 0, y: 0 };
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB);
+      noStroke();
+    }
+
+    function draw() {
+      background(10, 10, 10, 8);
+
+      if (mouseX > 0 && mouseY > 0) {
+        const dist = Math.sqrt(
+          Math.pow(mouseX - prevMouse.x, 2) +
+          Math.pow(mouseY - prevMouse.y, 2)
+        );
+
+        if (dist > 8) {
+          spawnCloud(mouseX, mouseY);
+          prevMouse = { x: mouseX, y: mouseY };
+        }
+      }
+
+      updateClouds();
+      drawClouds();
+    }
+
+    function spawnCloud(x, y) {
+      const baseColor = IKAT_COLORS[floor(random(IKAT_COLORS.length))];
+
+      clouds.push({
+        x: x,
+        y: y,
+        color: baseColor,
+        life: 1,
+        decay: random(0.003, 0.008),
+        seed: random(1000),
+        baseSize: random(20, 45),
+        numBlobs: floor(random(4, 8)),
+        drift: random(-0.5, 0.5)
+      });
+
+      if (clouds.length > 120) clouds.shift();
+    }
+
+    function updateClouds() {
+      for (let i = clouds.length - 1; i >= 0; i--) {
+        const c = clouds[i];
+        c.life -= c.decay;
+        c.y += 0.15;
+        c.x += c.drift;
+
+        if (c.life <= 0) {
+          clouds.splice(i, 1);
+        }
+      }
+    }
+
+    function drawClouds() {
+      for (const c of clouds) {
+        drawCloudShape(c);
+      }
+    }
+
+    function drawCloudShape(c) {
+      // Multiple overlapping soft circles create cloud effect
+      // Like dye seeping through fabric fibers
+
+      for (let i = 0; i < c.numBlobs; i++) {
+        const angle = (i / c.numBlobs) * TWO_PI + c.seed;
+        const dist = c.baseSize * 0.3 * noise(c.seed + i);
+
+        const bx = c.x + cos(angle) * dist;
+        const by = c.y + sin(angle) * dist * 1.5; // Elongate vertically
+
+        const blobSize = c.baseSize * (0.6 + noise(c.seed + i * 0.5) * 0.8);
+
+        // Draw soft blob with multiple fading layers
+        for (let layer = 5; layer >= 0; layer--) {
+          const layerSize = blobSize + layer * 6;
+          const alpha = c.life * (layer === 0 ? 200 : 35 - layer * 5);
+
+          // Abrash color variation
+          const abrash = noise(c.seed + layer * 0.3 + i);
+          const r = c.color[0] + (abrash - 0.5) * 30;
+          const g = c.color[1] + (abrash - 0.5) * 30;
+          const b = c.color[2] + (abrash - 0.5) * 30;
+
+          fill(r, g, b, alpha);
+
+          // Organic wobbly shape
+          beginShape();
+          for (let a = 0; a < TWO_PI; a += 0.3) {
+            const wobble = noise(c.seed + a * 2 + i + layer * 0.1) * 0.4 + 0.8;
+            const rx = layerSize/2 * wobble * 0.7;  // Narrower
+            const ry = layerSize/2 * wobble * 1.2;  // Taller (vertical stretch)
+            const px = bx + cos(a) * rx;
+            const py = by + sin(a) * ry;
+            vertex(px, py);
+          }
+          endShape(CLOSE);
+        }
+      }
+
+      // Central bright spot (where dye is most concentrated)
+      fill(c.color[0], c.color[1], c.color[2], c.life * 255);
+      const coreSize = c.baseSize * 0.25;
+      ellipse(c.x, c.y, coreSize, coreSize * 1.4);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>
