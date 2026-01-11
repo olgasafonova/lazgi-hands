@@ -3,3 +3,12 @@ node_modules/
 *.log
 .vite/
 dist/
+
+# Python venv
+.venv/
+
+# Raw audio stems
+assets/audio/stems/
+
+# Reference files
+reference/

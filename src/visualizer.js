@@ -44,6 +44,7 @@ export class Visualizer {
     this.container = container;
     this.onReady = onReady;
     this.hands = [];
+    this.arms = null;
     this.medallions = [];
     this.mode = 'learn';
     this.matchScore = 0;
@@ -124,6 +125,10 @@ export class Visualizer {
         }
       }
     }
+  }
+
+  updateArms(arms) {
+    this.arms = arms;
   }
 
   pickUniqueColors(count) {

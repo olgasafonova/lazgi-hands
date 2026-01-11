@@ -5,7 +5,7 @@
  * for Khorezm Lazgi dance learning and performance.
  */
 
-import { HandTracker } from './tracking.js';
+import { HandTracker, PoseTracker } from './tracking.js';
 import { Visualizer } from './visualizer.js';
 import { SoundEngine } from './music.js';
 import { templates, getClosestTemplate } from './templates.js';
@@ -17,12 +17,13 @@ const state = {
   musicPlaying: false,
   isLoading: true,
   currentHands: null,
+  currentArms: null,
   matchScore: 0,
   currentTemplate: 0
 };
 
 // Initialize components
-let tracker, visualizer, soundEngine;
+let tracker, poseTracker, visualizer, soundEngine;
 
 async function init() {
   console.log('Initializing Lazgi Hands...');
@@ -50,11 +51,29 @@ async function init() {
     videoElement: document.getElementById('video-feed')
   });
 
-  // Start tracker (this triggers camera permission)
+  // Setup pose tracker for arms
+  poseTracker = new PoseTracker({
+    onResults: handleArmResults,
+    videoElement: document.getElementById('video-feed')
+  });
+
+  // Start trackers (this triggers camera permission)
   try {
     await tracker.start();
     document.getElementById('loading').classList.add('hidden');
     state.isLoading = false;
+
+    // Start pose tracker separately (non-blocking, optional)
+    try {
+      const poseStarted = await poseTracker.start();
+      if (poseStarted) {
+        startPoseTracking();
+        console.log('Arm tracking enabled');
+      }
+    } catch (poseErr) {
+      console.warn('Pose tracker failed, arm tracking disabled:', poseErr);
+    }
+
   } catch (err) {
     console.error('Failed to start hand tracker:', err);
     document.getElementById('loading').innerHTML = `
@@ -63,6 +82,45 @@ async function init() {
         <p style="font-size: 12px; opacity: 0.7;">${err.message}</p>
       </div>
     `;
+  }
+}
+
+function startPoseTracking() {
+  const video = document.getElementById('video-feed');
+
+  async function processPose() {
+    if (video.readyState >= 2 && poseTracker) {
+      await poseTracker.sendFrame(video);
+    }
+    // Run at lower rate than hands (every 3 frames)
+    setTimeout(() => requestAnimationFrame(processPose), 100);
+  }
+
+  processPose();
+}
+
+function handleArmResults(arms) {
+  state.currentArms = arms;
+
+  if (!arms) return;
+
+  // Use arm data for sound control when enabled
+  if (state.soundEnabled && soundEngine) {
+    soundEngine.updateFromArms(arms);
+    updateArmIndicators(arms);
+  }
+
+  // Update visualizer with arm data
+  if (visualizer) {
+    visualizer.updateArms(arms);
+  }
+}
+
+function updateMixIndicator(wristX) {
+  const mixFill = document.getElementById('mix-fill');
+  if (mixFill) {
+    // wristX 0 = left (drums), 1 = right (melody)
+    mixFill.style.width = `${wristX * 100}%`;
   }
 }
 
@@ -80,8 +138,14 @@ function handleHandResults(results) {
       visualizer.setMatchScore(state.matchScore);
     }
 
-    // Sound responds to movement
+    // Hand position controls stem mix when sound is on
     if (state.soundEnabled) {
+      soundEngine.updateStemMix(results[0].landmarks);
+      updateMixIndicator(results[0].landmarks[0].x);
+    }
+
+    // Synth layer responds to movement when enabled
+    if (state.musicPlaying) {
       const velocity = calculateHandVelocity(results[0]);
       const spread = calculateFingerSpread(results[0]);
       soundEngine.updateFromHand(velocity, spread, results[0].landmarks);
@@ -109,7 +173,8 @@ function calculateHandVelocity(hand) {
   }
 
   hand.prevLandmarks = [...hand.landmarks];
-  return Math.min(totalDist / hand.landmarks.length * 50, 1);
+  // More sensitive velocity detection
+  return Math.min(totalDist / hand.landmarks.length * 100, 1);
 }
 
 function calculateFingerSpread(hand) {
@@ -163,6 +228,8 @@ function setupControls() {
     visualizer.setMode('perform');
   });
 
+  // Main sound control - plays Lazgi stems with gesture mixing
+  const mixIndicator = document.getElementById('mix-indicator');
   btnSound.addEventListener('click', async () => {
     state.soundEnabled = !state.soundEnabled;
     btnSound.textContent = `Sound: ${state.soundEnabled ? 'On' : 'Off'}`;
@@ -170,26 +237,61 @@ function setupControls() {
 
     if (state.soundEnabled) {
       await soundEngine.start();
+      await soundEngine.playRecordedMusic();
+      mixIndicator.classList.remove('hidden');
     } else {
+      soundEngine.stopRecordedMusic();
       soundEngine.stop();
+      mixIndicator.classList.add('hidden');
     }
   });
 
-  // Traditional Lazgi music from Khorezm
+  // Synth layer (Doira rhythm + finger notes)
   btnMusic.addEventListener('click', async () => {
     state.musicPlaying = !state.musicPlaying;
-    btnMusic.textContent = `Music: ${state.musicPlaying ? 'On' : 'Off'}`;
+    btnMusic.textContent = `Synth: ${state.musicPlaying ? 'On' : 'Off'}`;
     btnMusic.classList.toggle('active', state.musicPlaying);
 
     if (state.musicPlaying) {
-      await soundEngine.playRecordedMusic();
+      // Start sound engine if not already
+      await soundEngine.start();
+      // Start the Doira rhythm
+      soundEngine.startRhythm();
     } else {
-      soundEngine.stopRecordedMusic();
+      // Stop the rhythm
+      soundEngine.stopRhythm();
     }
   });
 
+  // Info modal
+  const btnInfo = document.getElementById('btn-info');
+  const btnCloseModal = document.getElementById('btn-close-modal');
+  const infoModal = document.getElementById('info-modal');
+
+  if (btnInfo && infoModal) {
+    btnInfo.addEventListener('click', () => {
+      infoModal.classList.remove('hidden');
+    });
+
+    btnCloseModal.addEventListener('click', () => {
+      infoModal.classList.add('hidden');
+    });
+
+    infoModal.addEventListener('click', (e) => {
+      if (e.target === infoModal) {
+        infoModal.classList.add('hidden');
+      }
+    });
+  }
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
+    // Close modal on Escape
+    if (e.key === 'Escape' && infoModal && !infoModal.classList.contains('hidden')) {
+      infoModal.classList.add('hidden');
+      return;
+    }
+
     if (e.key === '1') btnLearn.click();
     if (e.key === '2') btnPerform.click();
     if (e.key === 's') btnSound.click();
@@ -211,10 +313,15 @@ function waitForMediaPipe(maxWait = 5000) {
     const start = Date.now();
 
     function check() {
-      console.log('Checking for MediaPipe Hands...', !!window.Hands);
+      console.log('Checking for MediaPipe...', 'Hands:', !!window.Hands, 'Pose:', !!window.Pose);
 
       if (window.Hands) {
         console.log('MediaPipe Hands loaded');
+        if (window.Pose) {
+          console.log('MediaPipe Pose loaded (arm tracking enabled)');
+        } else {
+          console.log('MediaPipe Pose not loaded (arm tracking disabled)');
+        }
         resolve();
       } else if (Date.now() - start > maxWait) {
         reject(new Error('MediaPipe failed to load. Check Network tab for blocked scripts.'));

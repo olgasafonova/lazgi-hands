@@ -30,6 +30,12 @@ export class SoundEngine {
     this.baseTempo = 100; // BPM
     this.fft = null;
     this.fftData = new Float32Array(64);
+
+    // Separated stems
+    this.drumsPlayer = null;
+    this.melodyPlayer = null;
+    this.drumsVolume = 1;
+    this.melodyVolume = 1;
   }
 
   async start() {
@@ -45,11 +51,12 @@ export class SoundEngine {
       this.synths[name] = new Tone.Synth({
         oscillator: { type: 'sine' },
         envelope: {
-          attack: 0.1,
-          decay: 0.2,
-          sustain: 0.3,
-          release: 0.8
-        }
+          attack: 0.05,
+          decay: 0.15,
+          sustain: 0.4,
+          release: 0.5
+        },
+        volume: -6
       });
     }
 
@@ -85,14 +92,38 @@ export class SoundEngine {
     // Start drone on root note
     this.drone.triggerAttack('E2');
 
-    // Setup Doira (frame drum) rhythm
+    // Setup Doira (frame drum) rhythm (but don't start yet)
     this.setupRhythm();
+    this.rhythmPart.stop();
+    Tone.Transport.stop();
 
     // Setup FFT analyzer for visualizer
     this.fft = new Tone.FFT(64);
     Tone.Destination.connect(this.fft);
 
     this.isStarted = true;
+  }
+
+  /**
+   * Start the Doira rhythm pattern
+   */
+  startRhythm() {
+    if (this.rhythmPart) {
+      this.rhythmPart.start(0);
+      Tone.Transport.start();
+      console.log('Doira rhythm started');
+    }
+  }
+
+  /**
+   * Stop the Doira rhythm pattern
+   */
+  stopRhythm() {
+    if (this.rhythmPart) {
+      this.rhythmPart.stop();
+      Tone.Transport.stop();
+      console.log('Doira rhythm stopped');
+    }
   }
 
   /**
@@ -136,9 +167,9 @@ export class SoundEngine {
       }).toDestination()
     };
 
-    this.doira.dum.volume.value = -8;
-    this.doira.tak.volume.value = -14;
-    this.doira.rim.volume.value = -20;
+    this.doira.dum.volume.value = -4;
+    this.doira.tak.volume.value = -10;
+    this.doira.rim.volume.value = -16;
 
     // Traditional Lazgi 6/8 pattern
     // DUM . tak tak DUM tak | DUM . tak tak DUM tak
@@ -242,9 +273,80 @@ export class SoundEngine {
     const droneVol = -30 + (1 - wristY) * 15; // -30 to -15 dB
     this.drone.volume.rampTo(droneVol, 0.3);
 
-    // Velocity affects tempo (faster hands = faster rhythm)
-    const targetTempo = this.baseTempo + velocity * 40; // 100-140 BPM
-    Tone.Transport.bpm.rampTo(targetTempo, 0.5);
+    // Velocity affects tempo - more dramatic range (80-180 BPM)
+    const targetTempo = 80 + velocity * 100;
+    Tone.Transport.bpm.rampTo(targetTempo, 0.2);
+
+    // Wrist height also affects tempo (hand up = faster)
+    const heightTempo = 80 + (1 - wristY) * 80; // 80-160 based on height
+    const combinedTempo = (targetTempo + heightTempo) / 2;
+    Tone.Transport.bpm.rampTo(combinedTempo, 0.2);
+
+    // Hand position controls stem mix (when music is playing)
+    if (this.isPlayingRecorded) {
+      this.updateStemMix(landmarks);
+    }
+  }
+
+  /**
+   * Update sound based on arm positions
+   *
+   * Left arm height: drums volume
+   * Right arm height: melody volume
+   * Both arms up: boost overall volume
+   * Arms spread: reverb/space
+   */
+  updateFromArms(arms) {
+    if (!this.isStarted || !arms) return;
+
+    // Left arm controls drums volume (camera is mirrored, so left = right side)
+    if (this.drumsPlayer) {
+      const drumsVol = -20 + arms.right.armHeight * 20; // -20 to 0 dB
+      this.drumsPlayer.volume.rampTo(drumsVol, 0.2);
+    }
+
+    // Right arm controls melody volume
+    if (this.melodyPlayer) {
+      const melodyVol = -20 + arms.left.armHeight * 20;
+      this.melodyPlayer.volume.rampTo(melodyVol, 0.2);
+    }
+
+    // Arms spread controls reverb
+    if (this.effects.reverb) {
+      const reverbWet = arms.armsSpread * 0.8; // 0 to 0.8
+      this.effects.reverb.wet.rampTo(reverbWet, 0.3);
+    }
+
+    // Both arms up boosts intensity
+    if (arms.bothArmsUp && this.effects.filter) {
+      this.effects.filter.frequency.rampTo(8000, 0.2);
+    }
+  }
+
+  /**
+   * Map hand gestures to stem volume mix
+   *
+   * Wrist X position: left = more drums, right = more melody
+   * Finger spread: affects overall intensity
+   * Hand height: boosts the dominant stem
+   */
+  updateStemMix(landmarks) {
+    const wrist = landmarks[0];
+
+    // X position controls balance (0 = left/drums, 1 = right/melody)
+    // Camera is mirrored, so left hand position = right side of frame
+    const balance = wrist.x; // 0-1 range
+
+    // Create crossfade: left emphasizes drums, right emphasizes melody
+    const drumsVol = 1 - (balance * 0.7);  // 1.0 to 0.3
+    const melodyVol = 0.3 + (balance * 0.7); // 0.3 to 1.0
+
+    // Hand height boosts the dominant stem
+    const heightBoost = (1 - wrist.y) * 0.3; // 0 to 0.3
+
+    // Apply with smoothing
+    this.setDrumsVolume(Math.min(1, drumsVol + (balance < 0.5 ? heightBoost : 0)));
+    this.setMelodyVolume(Math.min(1, melodyVol + (balance >= 0.5 ? heightBoost : 0)));
   }
 
   /**
@@ -302,12 +404,9 @@ export class SoundEngine {
     Tone.Transport.start();
   }
 
-  stopRhythm() {
-    Tone.Transport.stop();
-  }
-
   /**
    * Load and play the recorded Lazgi music from Khorezm
+   * Uses AI-separated stems (drums + melody) for independent control
    * Source: archive.org - Bobomurod Hamdamov 2007 Urgench Lazgi
    */
   async playRecordedMusic() {
@@ -323,34 +422,51 @@ export class SoundEngine {
       this.fft = new Tone.FFT(64);
     }
 
-    // Create player if not exists
-    if (!this.recordedPlayer) {
-      this.recordedPlayer = new Tone.Player({
-        url: '/assets/audio/lazgi-trimmed.mp3',
+    // Create drums player if not exists
+    if (!this.drumsPlayer) {
+      this.drumsPlayer = new Tone.Player({
+        url: '/assets/audio/lazgi-drums.mp3',
         loop: true,
         autostart: false,
         volume: -6,
         onload: () => {
-          console.log('Lazgi music loaded');
+          console.log('Drums stem loaded');
         }
       }).toDestination();
 
-      // Connect to FFT for visualization
-      this.recordedPlayer.connect(this.fft);
+      this.drumsPlayer.connect(this.fft);
     }
 
-    // Wait for load and play
+    // Create melody player if not exists
+    if (!this.melodyPlayer) {
+      this.melodyPlayer = new Tone.Player({
+        url: '/assets/audio/lazgi-melody.mp3',
+        loop: true,
+        autostart: false,
+        volume: -6,
+        onload: () => {
+          console.log('Melody stem loaded');
+        }
+      }).toDestination();
+
+      this.melodyPlayer.connect(this.fft);
+    }
+
+    // Wait for both to load and play in sync
     await Tone.loaded();
-    this.recordedPlayer.start();
+    const now = Tone.now();
+    this.drumsPlayer.start(now);
+    this.melodyPlayer.start(now);
     this.isPlayingRecorded = true;
-    console.log('Playing recorded Lazgi music');
+    console.log('Playing separated Lazgi stems');
   }
 
   stopRecordedMusic() {
-    if (this.recordedPlayer && this.isPlayingRecorded) {
-      this.recordedPlayer.stop();
+    if (this.isPlayingRecorded) {
+      if (this.drumsPlayer) this.drumsPlayer.stop();
+      if (this.melodyPlayer) this.melodyPlayer.stop();
       this.isPlayingRecorded = false;
-      console.log('Stopped recorded Lazgi music');
+      console.log('Stopped Lazgi music');
     }
   }
 
@@ -364,13 +480,32 @@ export class SoundEngine {
   }
 
   /**
-   * Set volume for recorded music (0-1)
+   * Set volume for drums stem (0-1)
+   */
+  setDrumsVolume(volume) {
+    this.drumsVolume = volume;
+    if (this.drumsPlayer) {
+      const db = volume === 0 ? -60 : -6 + (volume - 1) * 20;
+      this.drumsPlayer.volume.value = db;
+    }
+  }
+
+  /**
+   * Set volume for melody stem (0-1)
+   */
+  setMelodyVolume(volume) {
+    this.melodyVolume = volume;
+    if (this.melodyPlayer) {
+      const db = volume === 0 ? -60 : -6 + (volume - 1) * 20;
+      this.melodyPlayer.volume.value = db;
+    }
+  }
+
+  /**
+   * Set volume for both stems together (0-1)
    */
   setRecordedVolume(volume) {
-    if (this.recordedPlayer) {
-      // Convert 0-1 to decibels (-60 to 0)
-      const db = volume === 0 ? -60 : (volume - 1) * 30;
-      this.recordedPlayer.volume.value = db;
-    }
+    this.setDrumsVolume(volume);
+    this.setMelodyVolume(volume);
   }
 }

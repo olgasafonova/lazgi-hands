@@ -174,3 +174,108 @@ export class HandTracker {
  * "Broken" angles: Sharp bends at PIP joints (6, 10, 14, 18)
  * Sun salutation: Wrist high (low y), palm facing up (z orientation)
  */
+
+
+/**
+ * Pose Tracker Module
+ *
+ * Wraps MediaPipe Pose for arm tracking.
+ * Returns 33 landmarks including shoulders, elbows, wrists.
+ *
+ * Arm landmark indices:
+ * 11: left_shoulder, 12: right_shoulder
+ * 13: left_elbow, 14: right_elbow
+ * 15: left_wrist, 16: right_wrist
+ */
+
+export class PoseTracker {
+  constructor({ onResults, videoElement }) {
+    this.onResults = onResults;
+    this.videoElement = videoElement;
+    this.pose = null;
+  }
+
+  async start() {
+    const Pose = window.Pose;
+
+    if (!Pose) {
+      console.warn('MediaPipe Pose not loaded, arm tracking disabled');
+      return false;
+    }
+
+    this.pose = new Pose({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`
+    });
+
+    this.pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    this.pose.onResults((results) => this.processResults(results));
+
+    this.running = true;
+    console.log('Pose tracking initialized');
+    return true;
+  }
+
+  async sendFrame(videoElement) {
+    if (!this.pose || !this.running) return;
+    await this.pose.send({ image: videoElement });
+  }
+
+  processResults(results) {
+    if (!results.poseLandmarks) {
+      this.onResults(null);
+      return;
+    }
+
+    const landmarks = results.poseLandmarks;
+
+    // Extract arm data
+    const arms = {
+      left: {
+        shoulder: landmarks[11],
+        elbow: landmarks[13],
+        wrist: landmarks[15],
+        // Computed metrics
+        armAngle: this.calculateArmAngle(landmarks[11], landmarks[13], landmarks[15]),
+        armHeight: 1 - landmarks[15].y, // 0 = down, 1 = up
+        armSpread: Math.abs(landmarks[15].x - 0.5) * 2 // 0 = center, 1 = edge
+      },
+      right: {
+        shoulder: landmarks[12],
+        elbow: landmarks[14],
+        wrist: landmarks[16],
+        armAngle: this.calculateArmAngle(landmarks[12], landmarks[14], landmarks[16]),
+        armHeight: 1 - landmarks[16].y,
+        armSpread: Math.abs(landmarks[16].x - 0.5) * 2
+      },
+      // Overall metrics
+      bothArmsUp: (1 - landmarks[15].y) > 0.6 && (1 - landmarks[16].y) > 0.6,
+      armsSpread: Math.abs(landmarks[15].x - landmarks[16].x),
+      symmetry: 1 - Math.abs((1 - landmarks[15].y) - (1 - landmarks[16].y))
+    };
+
+    this.onResults(arms);
+  }
+
+  calculateArmAngle(shoulder, elbow, wrist) {
+    // Angle at elbow
+    const v1 = { x: shoulder.x - elbow.x, y: shoulder.y - elbow.y };
+    const v2 = { x: wrist.x - elbow.x, y: wrist.y - elbow.y };
+
+    const dot = v1.x * v2.x + v1.y * v2.y;
+    const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+    const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+
+    return Math.acos(dot / (mag1 * mag2 + 0.0001));
+  }
+
+  stop() {
+    this.running = false;
+  }
+}
