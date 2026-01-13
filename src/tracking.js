@@ -66,35 +66,46 @@ export class HolisticTracker {
   async processFrame() {
     if (!this.running) return;
 
-    if (this.videoElement.readyState >= 2) {
-      await this.holistic.send({ image: this.videoElement });
+    try {
+      if (this.videoElement.readyState >= 2) {
+        await this.holistic.send({ image: this.videoElement });
+      }
+    } catch (err) {
+      console.warn('Tracking frame error:', err.message);
     }
 
+    // Always continue the loop even if there's an error
     requestAnimationFrame(() => this.processFrame());
   }
 
   processResults(results) {
-    const data = {
-      hands: [],
-      pose: null
-    };
+    try {
+      const data = {
+        hands: [],
+        pose: null
+      };
 
-    // Process left hand
-    if (results.leftHandLandmarks) {
-      data.hands.push(this.processHand(results.leftHandLandmarks, 'Left'));
+      // Process left hand
+      if (results.leftHandLandmarks) {
+        data.hands.push(this.processHand(results.leftHandLandmarks, 'Left'));
+      }
+
+      // Process right hand
+      if (results.rightHandLandmarks) {
+        data.hands.push(this.processHand(results.rightHandLandmarks, 'Right'));
+      }
+
+      // Process pose (arms and shoulders)
+      if (results.poseLandmarks) {
+        data.pose = this.processPose(results.poseLandmarks);
+      }
+
+      this.onResults(data);
+    } catch (err) {
+      console.warn('Error processing tracking results:', err.message);
+      // Send empty data to keep visualizer responsive
+      this.onResults({ hands: [], pose: null });
     }
-
-    // Process right hand
-    if (results.rightHandLandmarks) {
-      data.hands.push(this.processHand(results.rightHandLandmarks, 'Right'));
-    }
-
-    // Process pose (arms and shoulders)
-    if (results.poseLandmarks) {
-      data.pose = this.processPose(results.poseLandmarks);
-    }
-
-    this.onResults(data);
   }
 
   processHand(landmarks, handedness) {

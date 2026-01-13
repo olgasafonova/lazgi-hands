@@ -70,6 +70,35 @@
       z-index: 50;
     }
 
+    #learn-video {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 80%;
+      max-height: 70%;
+      border: 3px solid #ffc107;
+      border-radius: 12px;
+      z-index: 40;
+      display: none;
+    }
+
+    #learn-video.active {
+      display: block;
+    }
+
+    /* In learn mode, shrink the camera feed */
+    body.learn-mode #video-feed {
+      width: 120px;
+      height: 90px;
+      opacity: 0.7;
+    }
+
+    /* In perform mode, hide learn video */
+    body.perform-mode #learn-video {
+      display: none;
+    }
+
     #controls {
       position: absolute;
       bottom: 24px;
@@ -319,6 +348,11 @@
 
     <video id="video-feed" autoplay playsinline></video>
 
+    <!-- Learn mode: professional dancer video -->
+    <video id="learn-video" playsinline loop>
+      <source src="/assets/video/gulsanam-lazgi.mp4" type="video/mp4">
+    </video>
+
     <div id="info-panel">
       <h2>About This Project</h2>
       <p>An algorithm teaches dance from the land where algorithms were born.</p>
@@ -359,7 +393,7 @@
       </div>
     </div>
 
-    <div id="mode-indicator">Learn Mode</div>
+    <div id="mode-indicator">Watch & Learn</div>
 
     <div id="controls">
       <button id="btn-learn" class="active">Learn</button>

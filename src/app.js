@@ -8,7 +8,6 @@
 import { HolisticTracker } from './tracking.js';
 import { Visualizer } from './visualizer.js';
 import { SoundEngine } from './music.js';
-import { templates, getClosestTemplate } from './templates.js';
 
 // Application state
 const state = {
@@ -16,9 +15,7 @@ const state = {
   soundEnabled: false,
   isLoading: true,
   currentHands: null,
-  currentPose: null,
-  matchScore: 0,
-  currentTemplate: 0
+  currentPose: null
 };
 
 // Initialize components
@@ -70,49 +67,46 @@ async function init() {
  * Handle combined tracking results (hands + pose)
  */
 function handleTrackingResults(data) {
-  state.currentHands = data.hands;
-  state.currentPose = data.pose;
+  try {
+    state.currentHands = data.hands;
+    state.currentPose = data.pose;
 
-  // Update visualizer with hands
-  if (data.hands && data.hands.length > 0) {
-    visualizer.updateHands(data.hands);
+    // Update visualizer with hands (only in perform mode)
+    if (data.hands && data.hands.length > 0) {
+      visualizer.updateHands(data.hands);
 
-    // In learn mode, check template matching
-    if (state.mode === 'learn') {
-      const template = templates[state.currentTemplate];
-      state.matchScore = getClosestTemplate(data.hands[0], template);
-      visualizer.setMatchScore(state.matchScore);
-    }
+      // When sound is on and in perform mode, hands affect music
+      if (state.soundEnabled && soundEngine) {
+        // Find left and right hands
+        const leftHand = data.hands.find(h => h.handedness === 'Left');
+        const rightHand = data.hands.find(h => h.handedness === 'Right');
 
-    // When sound is on, hands affect music
-    if (state.soundEnabled && soundEngine) {
-      // Find left and right hands
-      const leftHand = data.hands.find(h => h.handedness === 'Left');
-      const rightHand = data.hands.find(h => h.handedness === 'Right');
+        // Left hand controls filter/effects
+        if (leftHand) {
+          const leftVelocity = calculateHandVelocity(leftHand, 'left');
+          soundEngine.updateLeftHand(leftHand, leftVelocity);
+        }
 
-      // Left hand controls filter/effects
-      if (leftHand) {
-        const leftVelocity = calculateHandVelocity(leftHand, 'left');
-        soundEngine.updateLeftHand(leftHand, leftVelocity);
+        // Right hand controls tempo/rhythm
+        if (rightHand) {
+          const rightVelocity = calculateHandVelocity(rightHand, 'right');
+          soundEngine.updateRightHand(rightHand, rightVelocity);
+        }
       }
+    } else {
+      visualizer.updateHands([]);
+    }
 
-      // Right hand controls tempo/rhythm
-      if (rightHand) {
-        const rightVelocity = calculateHandVelocity(rightHand, 'right');
-        soundEngine.updateRightHand(rightHand, rightVelocity);
+    // Update visualizer and sound with pose (arms/shoulders)
+    if (data.pose) {
+      visualizer.updatePose(data.pose);
+
+      if (state.soundEnabled && soundEngine) {
+        soundEngine.updateFromPose(data.pose);
       }
     }
-  } else {
-    visualizer.updateHands([]);
-  }
-
-  // Update visualizer and sound with pose (arms/shoulders)
-  if (data.pose) {
-    visualizer.updatePose(data.pose);
-
-    if (state.soundEnabled && soundEngine) {
-      soundEngine.updateFromPose(data.pose);
-    }
+  } catch (err) {
+    console.warn('Error handling tracking results:', err.message);
   }
 }
 
@@ -156,25 +150,52 @@ function setupControls() {
 
   console.log('Buttons found, adding listeners...');
 
+  const learnVideo = document.getElementById('learn-video');
+
+  // Learn mode: watch professional dancer video
   btnLearn.addEventListener('click', () => {
     console.log('Learn clicked');
     state.mode = 'learn';
     btnLearn.classList.add('active');
     btnPerform.classList.remove('active');
-    modeIndicator.textContent = 'Learn Mode';
+    modeIndicator.textContent = 'Watch & Learn';
+    document.body.classList.add('learn-mode');
+    document.body.classList.remove('perform-mode');
     visualizer.setMode('learn');
+
+    // Show and play the learn video
+    learnVideo.classList.add('active');
+    learnVideo.currentTime = 0;
+    learnVideo.play();
+
+    // Stop tracking music (video has its own audio)
+    if (state.soundEnabled) {
+      soundEngine.stopRecordedMusic();
+    }
   });
 
-  btnPerform.addEventListener('click', () => {
+  // Perform mode: user dances with tracking
+  btnPerform.addEventListener('click', async () => {
     console.log('Perform clicked');
     state.mode = 'perform';
     btnPerform.classList.add('active');
     btnLearn.classList.remove('active');
-    modeIndicator.textContent = 'Perform Mode';
+    modeIndicator.textContent = 'Your Turn!';
+    document.body.classList.add('perform-mode');
+    document.body.classList.remove('learn-mode');
     visualizer.setMode('perform');
+
+    // Hide and pause the learn video
+    learnVideo.classList.remove('active');
+    learnVideo.pause();
+
+    // Start tracking music if sound is enabled
+    if (state.soundEnabled) {
+      await soundEngine.playRecordedMusic();
+    }
   });
 
-  // Main sound control - plays Lazgi music
+  // Sound toggle - only affects perform mode
   btnSound.addEventListener('click', async () => {
     state.soundEnabled = !state.soundEnabled;
     btnSound.textContent = `Sound: ${state.soundEnabled ? 'On' : 'Off'}`;
@@ -182,7 +203,10 @@ function setupControls() {
 
     if (state.soundEnabled) {
       await soundEngine.start();
-      await soundEngine.playRecordedMusic();
+      // Only play music in perform mode
+      if (state.mode === 'perform') {
+        await soundEngine.playRecordedMusic();
+      }
     } else {
       soundEngine.stopRecordedMusic();
       soundEngine.stop();
@@ -218,16 +242,17 @@ function setupControls() {
       return;
     }
 
-    if (e.key === '1') btnLearn.click();
-    if (e.key === '2') btnPerform.click();
+    if (e.key === '1' || e.key === 'l') btnLearn.click();
+    if (e.key === '2' || e.key === 'p') btnPerform.click();
     if (e.key === 's') btnSound.click();
-    if (e.key === 'ArrowRight' && state.mode === 'learn') {
-      state.currentTemplate = (state.currentTemplate + 1) % templates.length;
-      visualizer.setTemplate(templates[state.currentTemplate]);
-    }
-    if (e.key === 'ArrowLeft' && state.mode === 'learn') {
-      state.currentTemplate = (state.currentTemplate - 1 + templates.length) % templates.length;
-      visualizer.setTemplate(templates[state.currentTemplate]);
+    if (e.key === ' ') {
+      e.preventDefault();
+      // Space toggles between learn and perform
+      if (state.mode === 'learn') {
+        btnPerform.click();
+      } else {
+        btnLearn.click();
+      }
     }
   });
 }
