@@ -116,14 +116,6 @@ function handleArmResults(arms) {
   }
 }
 
-function updateMixIndicator(wristX) {
-  const mixFill = document.getElementById('mix-fill');
-  if (mixFill) {
-    // wristX 0 = left (drums), 1 = right (melody)
-    mixFill.style.width = `${wristX * 100}%`;
-  }
-}
-
 function handleHandResults(results) {
   state.currentHands = results;
 
@@ -138,11 +130,6 @@ function handleHandResults(results) {
       visualizer.setMatchScore(state.matchScore);
     }
 
-    // Hand position controls stem mix when sound is on
-    if (state.soundEnabled) {
-      soundEngine.updateStemMix(results[0].landmarks);
-      updateMixIndicator(results[0].landmarks[0].x);
-    }
 
     // Synth layer responds to movement when enabled
     if (state.musicPlaying) {
@@ -200,10 +187,9 @@ function setupControls() {
   const btnLearn = document.getElementById('btn-learn');
   const btnPerform = document.getElementById('btn-perform');
   const btnSound = document.getElementById('btn-sound');
-  const btnMusic = document.getElementById('btn-music');
   const modeIndicator = document.getElementById('mode-indicator');
 
-  if (!btnLearn || !btnPerform || !btnSound || !btnMusic) {
+  if (!btnLearn || !btnPerform || !btnSound) {
     console.error('Could not find button elements');
     return;
   }
@@ -228,8 +214,7 @@ function setupControls() {
     visualizer.setMode('perform');
   });
 
-  // Main sound control - plays Lazgi stems with gesture mixing
-  const mixIndicator = document.getElementById('mix-indicator');
+  // Main sound control - plays Lazgi music
   btnSound.addEventListener('click', async () => {
     state.soundEnabled = !state.soundEnabled;
     btnSound.textContent = `Sound: ${state.soundEnabled ? 'On' : 'Off'}`;
@@ -238,28 +223,9 @@ function setupControls() {
     if (state.soundEnabled) {
       await soundEngine.start();
       await soundEngine.playRecordedMusic();
-      mixIndicator.classList.remove('hidden');
     } else {
       soundEngine.stopRecordedMusic();
       soundEngine.stop();
-      mixIndicator.classList.add('hidden');
-    }
-  });
-
-  // Synth layer (Doira rhythm + finger notes)
-  btnMusic.addEventListener('click', async () => {
-    state.musicPlaying = !state.musicPlaying;
-    btnMusic.textContent = `Synth: ${state.musicPlaying ? 'On' : 'Off'}`;
-    btnMusic.classList.toggle('active', state.musicPlaying);
-
-    if (state.musicPlaying) {
-      // Start sound engine if not already
-      await soundEngine.start();
-      // Start the Doira rhythm
-      soundEngine.startRhythm();
-    } else {
-      // Stop the rhythm
-      soundEngine.stopRhythm();
     }
   });
 

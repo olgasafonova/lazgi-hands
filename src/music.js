@@ -31,11 +31,9 @@ export class SoundEngine {
     this.fft = null;
     this.fftData = new Float32Array(64);
 
-    // Separated stems
-    this.drumsPlayer = null;
-    this.melodyPlayer = null;
-    this.drumsVolume = 1;
-    this.melodyVolume = 1;
+    // Music player
+    this.musicPlayer = null;
+    this.musicVolume = 1;
   }
 
   async start() {
@@ -282,34 +280,16 @@ export class SoundEngine {
     const combinedTempo = (targetTempo + heightTempo) / 2;
     Tone.Transport.bpm.rampTo(combinedTempo, 0.2);
 
-    // Hand position controls stem mix (when music is playing)
-    if (this.isPlayingRecorded) {
-      this.updateStemMix(landmarks);
-    }
   }
 
   /**
    * Update sound based on arm positions
    *
-   * Left arm height: drums volume
-   * Right arm height: melody volume
-   * Both arms up: boost overall volume
    * Arms spread: reverb/space
+   * Both arms up: boost intensity
    */
   updateFromArms(arms) {
     if (!this.isStarted || !arms) return;
-
-    // Left arm controls drums volume (camera is mirrored, so left = right side)
-    if (this.drumsPlayer) {
-      const drumsVol = -20 + arms.right.armHeight * 20; // -20 to 0 dB
-      this.drumsPlayer.volume.rampTo(drumsVol, 0.2);
-    }
-
-    // Right arm controls melody volume
-    if (this.melodyPlayer) {
-      const melodyVol = -20 + arms.left.armHeight * 20;
-      this.melodyPlayer.volume.rampTo(melodyVol, 0.2);
-    }
 
     // Arms spread controls reverb
     if (this.effects.reverb) {
@@ -321,32 +301,6 @@ export class SoundEngine {
     if (arms.bothArmsUp && this.effects.filter) {
       this.effects.filter.frequency.rampTo(8000, 0.2);
     }
-  }
-
-  /**
-   * Map hand gestures to stem volume mix
-   *
-   * Wrist X position: left = more drums, right = more melody
-   * Finger spread: affects overall intensity
-   * Hand height: boosts the dominant stem
-   */
-  updateStemMix(landmarks) {
-    const wrist = landmarks[0];
-
-    // X position controls balance (0 = left/drums, 1 = right/melody)
-    // Camera is mirrored, so left hand position = right side of frame
-    const balance = wrist.x; // 0-1 range
-
-    // Create crossfade: left emphasizes drums, right emphasizes melody
-    const drumsVol = 1 - (balance * 0.7);  // 1.0 to 0.3
-    const melodyVol = 0.3 + (balance * 0.7); // 0.3 to 1.0
-
-    // Hand height boosts the dominant stem
-    const heightBoost = (1 - wrist.y) * 0.3; // 0 to 0.3
-
-    // Apply with smoothing
-    this.setDrumsVolume(Math.min(1, drumsVol + (balance < 0.5 ? heightBoost : 0)));
-    this.setMelodyVolume(Math.min(1, melodyVol + (balance >= 0.5 ? heightBoost : 0)));
   }
 
   /**
@@ -405,15 +359,14 @@ export class SoundEngine {
   }
 
   /**
-   * Load and play the recorded Lazgi music from Khorezm
-   * Uses AI-separated stems (drums + melody) for independent control
-   * Source: archive.org - Bobomurod Hamdamov 2007 Urgench Lazgi
+   * Load and play Lazgi music
+   * Source: Gulsanam Mamazoitova - Lazgi
    */
   async playRecordedMusic() {
     await Tone.start();
 
+    // Already playing, don't restart
     if (this.isPlayingRecorded) {
-      this.stopRecordedMusic();
       return;
     }
 
@@ -422,49 +375,30 @@ export class SoundEngine {
       this.fft = new Tone.FFT(64);
     }
 
-    // Create drums player if not exists
-    if (!this.drumsPlayer) {
-      this.drumsPlayer = new Tone.Player({
-        url: '/assets/audio/lazgi-drums.mp3',
+    // Create music player if not exists
+    if (!this.musicPlayer) {
+      this.musicPlayer = new Tone.Player({
+        url: '/assets/audio/gulsanam-lazgi.mp3',
         loop: true,
         autostart: false,
         volume: -6,
         onload: () => {
-          console.log('Drums stem loaded');
+          console.log('Lazgi music loaded');
         }
       }).toDestination();
 
-      this.drumsPlayer.connect(this.fft);
+      this.musicPlayer.connect(this.fft);
     }
 
-    // Create melody player if not exists
-    if (!this.melodyPlayer) {
-      this.melodyPlayer = new Tone.Player({
-        url: '/assets/audio/lazgi-melody.mp3',
-        loop: true,
-        autostart: false,
-        volume: -6,
-        onload: () => {
-          console.log('Melody stem loaded');
-        }
-      }).toDestination();
-
-      this.melodyPlayer.connect(this.fft);
-    }
-
-    // Wait for both to load and play in sync
     await Tone.loaded();
-    const now = Tone.now();
-    this.drumsPlayer.start(now);
-    this.melodyPlayer.start(now);
+    this.musicPlayer.start();
     this.isPlayingRecorded = true;
-    console.log('Playing separated Lazgi stems');
+    console.log('Playing Gulsanam Mamazoitova - Lazgi');
   }
 
   stopRecordedMusic() {
     if (this.isPlayingRecorded) {
-      if (this.drumsPlayer) this.drumsPlayer.stop();
-      if (this.melodyPlayer) this.melodyPlayer.stop();
+      if (this.musicPlayer) this.musicPlayer.stop();
       this.isPlayingRecorded = false;
       console.log('Stopped Lazgi music');
     }
@@ -480,32 +414,13 @@ export class SoundEngine {
   }
 
   /**
-   * Set volume for drums stem (0-1)
+   * Set music volume (0-1)
    */
-  setDrumsVolume(volume) {
-    this.drumsVolume = volume;
-    if (this.drumsPlayer) {
+  setMusicVolume(volume) {
+    this.musicVolume = volume;
+    if (this.musicPlayer) {
       const db = volume === 0 ? -60 : -6 + (volume - 1) * 20;
-      this.drumsPlayer.volume.value = db;
+      this.musicPlayer.volume.value = db;
     }
-  }
-
-  /**
-   * Set volume for melody stem (0-1)
-   */
-  setMelodyVolume(volume) {
-    this.melodyVolume = volume;
-    if (this.melodyPlayer) {
-      const db = volume === 0 ? -60 : -6 + (volume - 1) * 20;
-      this.melodyPlayer.volume.value = db;
-    }
-  }
-
-  /**
-   * Set volume for both stems together (0-1)
-   */
-  setRecordedVolume(volume) {
-    this.setDrumsVolume(volume);
-    this.setMelodyVolume(volume);
   }
 }
