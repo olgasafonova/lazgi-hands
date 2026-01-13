@@ -45,6 +45,7 @@ export class Visualizer {
     this.onReady = onReady;
     this.hands = [];
     this.arms = null;
+    this.pose = null;
     this.medallions = [];
     this.mode = 'learn';
     this.matchScore = 0;
@@ -88,6 +89,7 @@ export class Visualizer {
           self.drawMatchIndicator();
         }
 
+        self.drawPose();
         self.drawHands();
         self.drawConnections();
       };
@@ -129,6 +131,10 @@ export class Visualizer {
 
   updateArms(arms) {
     this.arms = arms;
+  }
+
+  updatePose(pose) {
+    this.pose = pose;
   }
 
   pickUniqueColors(count) {
@@ -411,6 +417,77 @@ export class Visualizer {
     }
 
     this.p.noStroke();
+  }
+
+  drawPose() {
+    if (!this.pose) return;
+
+    const p = this.p;
+    const leftColor = COLORS.turquoise;
+    const rightColor = COLORS.crimson;
+
+    // Draw arm skeletons (shoulders, elbows, wrists)
+    p.strokeWeight(3);
+
+    // Left arm (turquoise)
+    if (this.pose.left) {
+      const left = this.pose.left;
+      p.stroke(leftColor[0], leftColor[1], leftColor[2], 120);
+
+      // Shoulder to elbow
+      p.line(
+        left.shoulder.x * p.width, left.shoulder.y * p.height,
+        left.elbow.x * p.width, left.elbow.y * p.height
+      );
+      // Elbow to wrist
+      p.line(
+        left.elbow.x * p.width, left.elbow.y * p.height,
+        left.wrist.x * p.width, left.wrist.y * p.height
+      );
+
+      // Shoulder joint
+      p.noStroke();
+      p.fill(leftColor[0], leftColor[1], leftColor[2], 150);
+      p.ellipse(left.shoulder.x * p.width, left.shoulder.y * p.height, 16);
+      // Elbow joint
+      p.ellipse(left.elbow.x * p.width, left.elbow.y * p.height, 12);
+    }
+
+    // Right arm (crimson)
+    if (this.pose.right) {
+      const right = this.pose.right;
+      p.stroke(rightColor[0], rightColor[1], rightColor[2], 120);
+
+      // Shoulder to elbow
+      p.line(
+        right.shoulder.x * p.width, right.shoulder.y * p.height,
+        right.elbow.x * p.width, right.elbow.y * p.height
+      );
+      // Elbow to wrist
+      p.line(
+        right.elbow.x * p.width, right.elbow.y * p.height,
+        right.wrist.x * p.width, right.wrist.y * p.height
+      );
+
+      // Shoulder joint
+      p.noStroke();
+      p.fill(rightColor[0], rightColor[1], rightColor[2], 150);
+      p.ellipse(right.shoulder.x * p.width, right.shoulder.y * p.height, 16);
+      // Elbow joint
+      p.ellipse(right.elbow.x * p.width, right.elbow.y * p.height, 12);
+    }
+
+    // Draw shoulder line connecting both shoulders
+    if (this.pose.left && this.pose.right) {
+      p.stroke(COLORS.gold[0], COLORS.gold[1], COLORS.gold[2], 80);
+      p.strokeWeight(2);
+      p.line(
+        this.pose.left.shoulder.x * p.width, this.pose.left.shoulder.y * p.height,
+        this.pose.right.shoulder.x * p.width, this.pose.right.shoulder.y * p.height
+      );
+    }
+
+    p.noStroke();
   }
 
   drawTemplate() {

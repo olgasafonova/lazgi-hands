@@ -283,24 +283,70 @@ export class SoundEngine {
   }
 
   /**
-   * Update sound based on arm positions
-   *
-   * Arms spread: reverb/space
-   * Both arms up: boost intensity
+   * Left hand controls filter and delay effects
+   * - Hand height: filter cutoff frequency
+   * - Hand spread: delay wet amount
+   * - Velocity: filter resonance
    */
-  updateFromArms(arms) {
-    if (!this.isStarted || !arms) return;
+  updateLeftHand(hand, velocity) {
+    if (!this.isStarted) return;
 
-    // Arms spread controls reverb
-    if (this.effects.reverb) {
-      const reverbWet = arms.armsSpread * 0.8; // 0 to 0.8
-      this.effects.reverb.wet.rampTo(reverbWet, 0.3);
+    // Hand height controls filter cutoff (higher hand = brighter sound)
+    const height = 1 - hand.palmCenter.y;
+    const filterFreq = 200 + height * 4000;
+    if (this.effects.filter) {
+      this.effects.filter.frequency.rampTo(filterFreq, 0.1);
     }
 
-    // Both arms up boosts intensity
-    if (arms.bothArmsUp && this.effects.filter) {
+    // Finger spread controls delay
+    const spread = hand.fingerSpread || 0;
+    if (this.effects.delay) {
+      this.effects.delay.wet.rampTo(spread * 0.4, 0.2);
+    }
+  }
+
+  /**
+   * Right hand controls reverb and spatial effects
+   * - Hand height: reverb amount
+   * - Hand x position: stereo pan (future)
+   * - Velocity: intensity boost
+   */
+  updateRightHand(hand, velocity) {
+    if (!this.isStarted) return;
+
+    // Hand height controls reverb
+    const height = 1 - hand.palmCenter.y;
+    if (this.effects.reverb) {
+      this.effects.reverb.wet.rampTo(height * 0.6, 0.2);
+    }
+
+    // Velocity adds energy (could modulate playback rate in future)
+    // For now, velocity affects filter Q or resonance
+  }
+
+  /**
+   * Pose (arms/shoulders) controls overall intensity
+   * - Arms spread: stereo width / spatial
+   * - Both arms up: energy boost
+   * - Arm height: volume dynamics
+   */
+  updateFromPose(pose) {
+    if (!this.isStarted || !pose) return;
+
+    // Arms spread controls overall reverb space
+    if (this.effects.reverb) {
+      const baseReverb = this.effects.reverb.wet.value;
+      const spreadBoost = pose.armsSpread * 0.3;
+      this.effects.reverb.wet.rampTo(Math.min(baseReverb + spreadBoost, 0.8), 0.3);
+    }
+
+    // Both arms up opens up the filter completely
+    if (pose.bothArmsUp && this.effects.filter) {
       this.effects.filter.frequency.rampTo(8000, 0.2);
     }
+
+    // Shoulder movement could affect something subtle
+    // (left for future enhancement)
   }
 
   /**

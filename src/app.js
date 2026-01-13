@@ -5,7 +5,7 @@
  * for Khorezm Lazgi dance learning and performance.
  */
 
-import { HandTracker, PoseTracker } from './tracking.js';
+import { HolisticTracker } from './tracking.js';
 import { Visualizer } from './visualizer.js';
 import { SoundEngine } from './music.js';
 import { templates, getClosestTemplate } from './templates.js';
@@ -14,16 +14,15 @@ import { templates, getClosestTemplate } from './templates.js';
 const state = {
   mode: 'learn', // 'learn' | 'perform'
   soundEnabled: false,
-  musicPlaying: false,
   isLoading: true,
   currentHands: null,
-  currentArms: null,
+  currentPose: null,
   matchScore: 0,
   currentTemplate: 0
 };
 
 // Initialize components
-let tracker, poseTracker, visualizer, soundEngine;
+let tracker, visualizer, soundEngine;
 
 async function init() {
   console.log('Initializing Lazgi Hands...');
@@ -45,37 +44,19 @@ async function init() {
   // Connect sound engine to visualizer for equalizer
   visualizer.setSoundEngine(soundEngine);
 
-  // Setup hand tracker
-  tracker = new HandTracker({
-    onResults: handleHandResults,
+  // Setup holistic tracker (hands + pose combined)
+  tracker = new HolisticTracker({
+    onResults: handleTrackingResults,
     videoElement: document.getElementById('video-feed')
   });
 
-  // Setup pose tracker for arms
-  poseTracker = new PoseTracker({
-    onResults: handleArmResults,
-    videoElement: document.getElementById('video-feed')
-  });
-
-  // Start trackers (this triggers camera permission)
+  // Start tracker (this triggers camera permission)
   try {
     await tracker.start();
     document.getElementById('loading').classList.add('hidden');
     state.isLoading = false;
-
-    // Start pose tracker separately (non-blocking, optional)
-    try {
-      const poseStarted = await poseTracker.start();
-      if (poseStarted) {
-        startPoseTracking();
-        console.log('Arm tracking enabled');
-      }
-    } catch (poseErr) {
-      console.warn('Pose tracker failed, arm tracking disabled:', poseErr);
-    }
-
   } catch (err) {
-    console.error('Failed to start hand tracker:', err);
+    console.error('Failed to start tracker:', err);
     document.getElementById('loading').innerHTML = `
       <div style="color: #ffc107; text-align: center; padding: 20px;">
         <p>Camera access required</p>
@@ -85,100 +66,79 @@ async function init() {
   }
 }
 
-function startPoseTracking() {
-  const video = document.getElementById('video-feed');
+/**
+ * Handle combined tracking results (hands + pose)
+ */
+function handleTrackingResults(data) {
+  state.currentHands = data.hands;
+  state.currentPose = data.pose;
 
-  async function processPose() {
-    if (video.readyState >= 2 && poseTracker) {
-      await poseTracker.sendFrame(video);
-    }
-    // Run at lower rate than hands (every 3 frames)
-    setTimeout(() => requestAnimationFrame(processPose), 100);
-  }
-
-  processPose();
-}
-
-function handleArmResults(arms) {
-  state.currentArms = arms;
-
-  if (!arms) return;
-
-  // Use arm data for sound control when enabled
-  if (state.soundEnabled && soundEngine) {
-    soundEngine.updateFromArms(arms);
-    updateArmIndicators(arms);
-  }
-
-  // Update visualizer with arm data
-  if (visualizer) {
-    visualizer.updateArms(arms);
-  }
-}
-
-function handleHandResults(results) {
-  state.currentHands = results;
-
-  if (results && results.length > 0) {
-    // Update visualizer with hand landmarks
-    visualizer.updateHands(results);
+  // Update visualizer with hands
+  if (data.hands && data.hands.length > 0) {
+    visualizer.updateHands(data.hands);
 
     // In learn mode, check template matching
     if (state.mode === 'learn') {
       const template = templates[state.currentTemplate];
-      state.matchScore = getClosestTemplate(results[0], template);
+      state.matchScore = getClosestTemplate(data.hands[0], template);
       visualizer.setMatchScore(state.matchScore);
     }
 
+    // When sound is on, hands affect music
+    if (state.soundEnabled && soundEngine) {
+      // Find left and right hands
+      const leftHand = data.hands.find(h => h.handedness === 'Left');
+      const rightHand = data.hands.find(h => h.handedness === 'Right');
 
-    // Synth layer responds to movement when enabled
-    if (state.musicPlaying) {
-      const velocity = calculateHandVelocity(results[0]);
-      const spread = calculateFingerSpread(results[0]);
-      soundEngine.updateFromHand(velocity, spread, results[0].landmarks);
+      // Left hand controls filter/effects
+      if (leftHand) {
+        const leftVelocity = calculateHandVelocity(leftHand, 'left');
+        soundEngine.updateLeftHand(leftHand, leftVelocity);
+      }
+
+      // Right hand controls tempo/rhythm
+      if (rightHand) {
+        const rightVelocity = calculateHandVelocity(rightHand, 'right');
+        soundEngine.updateRightHand(rightHand, rightVelocity);
+      }
     }
   } else {
     visualizer.updateHands([]);
   }
+
+  // Update visualizer and sound with pose (arms/shoulders)
+  if (data.pose) {
+    visualizer.updatePose(data.pose);
+
+    if (state.soundEnabled && soundEngine) {
+      soundEngine.updateFromPose(data.pose);
+    }
+  }
 }
 
-function calculateHandVelocity(hand) {
-  // Calculate average movement speed of landmarks
-  if (!hand.prevLandmarks) {
-    hand.prevLandmarks = hand.landmarks;
+// Store previous landmarks for velocity calculation
+const prevLandmarks = { left: null, right: null };
+
+function calculateHandVelocity(hand, side) {
+  const prev = prevLandmarks[side];
+
+  if (!prev) {
+    prevLandmarks[side] = [...hand.landmarks];
     return 0;
   }
 
   let totalDist = 0;
   for (let i = 0; i < hand.landmarks.length; i++) {
     const curr = hand.landmarks[i];
-    const prev = hand.prevLandmarks[i];
+    const p = prev[i];
     totalDist += Math.sqrt(
-      Math.pow(curr.x - prev.x, 2) +
-      Math.pow(curr.y - prev.y, 2)
+      Math.pow(curr.x - p.x, 2) +
+      Math.pow(curr.y - p.y, 2)
     );
   }
 
-  hand.prevLandmarks = [...hand.landmarks];
-  // More sensitive velocity detection
+  prevLandmarks[side] = [...hand.landmarks];
   return Math.min(totalDist / hand.landmarks.length * 100, 1);
-}
-
-function calculateFingerSpread(hand) {
-  // Calculate how spread apart the fingers are
-  const fingertips = [4, 8, 12, 16, 20]; // Thumb, index, middle, ring, pinky tips
-  const palm = hand.landmarks[0]; // Wrist
-
-  let avgDist = 0;
-  for (const tip of fingertips) {
-    const tipPos = hand.landmarks[tip];
-    avgDist += Math.sqrt(
-      Math.pow(tipPos.x - palm.x, 2) +
-      Math.pow(tipPos.y - palm.y, 2)
-    );
-  }
-
-  return Math.min(avgDist / fingertips.length * 3, 1);
 }
 
 function setupControls() {
@@ -261,7 +221,6 @@ function setupControls() {
     if (e.key === '1') btnLearn.click();
     if (e.key === '2') btnPerform.click();
     if (e.key === 's') btnSound.click();
-    if (e.key === 'm') btnMusic.click();
     if (e.key === 'ArrowRight' && state.mode === 'learn') {
       state.currentTemplate = (state.currentTemplate + 1) % templates.length;
       visualizer.setTemplate(templates[state.currentTemplate]);
@@ -273,24 +232,19 @@ function setupControls() {
   });
 }
 
-// Wait for MediaPipe to load, then start
-function waitForMediaPipe(maxWait = 5000) {
+// Wait for MediaPipe Holistic to load
+function waitForMediaPipe(maxWait = 10000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
 
     function check() {
-      console.log('Checking for MediaPipe...', 'Hands:', !!window.Hands, 'Pose:', !!window.Pose);
+      console.log('Checking for MediaPipe Holistic...', !!window.Holistic);
 
-      if (window.Hands) {
-        console.log('MediaPipe Hands loaded');
-        if (window.Pose) {
-          console.log('MediaPipe Pose loaded (arm tracking enabled)');
-        } else {
-          console.log('MediaPipe Pose not loaded (arm tracking disabled)');
-        }
+      if (window.Holistic) {
+        console.log('MediaPipe Holistic loaded (hands + pose tracking)');
         resolve();
       } else if (Date.now() - start > maxWait) {
-        reject(new Error('MediaPipe failed to load. Check Network tab for blocked scripts.'));
+        reject(new Error('MediaPipe Holistic failed to load. Check if scripts are blocked.'));
       } else {
         setTimeout(check, 500);
       }

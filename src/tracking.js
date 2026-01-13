@@ -1,16 +1,199 @@
 /**
- * Hand Tracking Module
+ * Holistic Tracking Module
  *
- * Wraps MediaPipe Hands for real-time hand landmark detection.
- * Returns 21 landmarks per hand with x, y, z coordinates.
+ * Uses MediaPipe Holistic for combined hand + pose tracking.
+ * Provides 543 landmarks: 33 pose + 21 per hand + 468 face (unused).
  *
- * Landmark indices:
+ * Hand landmark indices (per hand):
  * 0: Wrist
  * 1-4: Thumb (CMC, MCP, IP, TIP)
  * 5-8: Index finger (MCP, PIP, DIP, TIP)
  * 9-12: Middle finger
  * 13-16: Ring finger
  * 17-20: Pinky finger
+ *
+ * Pose landmark indices (relevant):
+ * 11: left_shoulder, 12: right_shoulder
+ * 13: left_elbow, 14: right_elbow
+ * 15: left_wrist, 16: right_wrist
+ */
+
+export class HolisticTracker {
+  constructor({ onResults, videoElement }) {
+    this.onResults = onResults;
+    this.videoElement = videoElement;
+    this.holistic = null;
+    this.running = false;
+  }
+
+  async start() {
+    const Holistic = window.Holistic;
+
+    if (!Holistic) {
+      throw new Error('MediaPipe Holistic not loaded.');
+    }
+
+    this.holistic = new Holistic({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${file}`
+    });
+
+    this.holistic.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      refineFaceLandmarks: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    this.holistic.onResults((results) => this.processResults(results));
+
+    // Use native browser camera API
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: 'user' }
+    });
+
+    this.videoElement.srcObject = stream;
+    await this.videoElement.play();
+
+    this.running = true;
+    this.processFrame();
+
+    console.log('Holistic tracking started (hands + pose)');
+  }
+
+  async processFrame() {
+    if (!this.running) return;
+
+    if (this.videoElement.readyState >= 2) {
+      await this.holistic.send({ image: this.videoElement });
+    }
+
+    requestAnimationFrame(() => this.processFrame());
+  }
+
+  processResults(results) {
+    const data = {
+      hands: [],
+      pose: null
+    };
+
+    // Process left hand
+    if (results.leftHandLandmarks) {
+      data.hands.push(this.processHand(results.leftHandLandmarks, 'Left'));
+    }
+
+    // Process right hand
+    if (results.rightHandLandmarks) {
+      data.hands.push(this.processHand(results.rightHandLandmarks, 'Right'));
+    }
+
+    // Process pose (arms and shoulders)
+    if (results.poseLandmarks) {
+      data.pose = this.processPose(results.poseLandmarks);
+    }
+
+    this.onResults(data);
+  }
+
+  processHand(landmarks, handedness) {
+    return {
+      landmarks: landmarks,
+      handedness: handedness,
+      confidence: 1.0,
+
+      // Convenience accessors
+      wrist: landmarks[0],
+      thumbTip: landmarks[4],
+      indexTip: landmarks[8],
+      middleTip: landmarks[12],
+      ringTip: landmarks[16],
+      pinkyTip: landmarks[20],
+
+      // Computed metrics
+      palmCenter: this.calculatePalmCenter(landmarks),
+      fingerSpread: this.calculateFingerSpread(landmarks),
+      wristAngle: this.calculateWristAngle(landmarks)
+    };
+  }
+
+  processPose(landmarks) {
+    return {
+      left: {
+        shoulder: landmarks[11],
+        elbow: landmarks[13],
+        wrist: landmarks[15],
+        armAngle: this.calculateArmAngle(landmarks[11], landmarks[13], landmarks[15]),
+        armHeight: 1 - landmarks[15].y,
+        shoulderHeight: 1 - landmarks[11].y
+      },
+      right: {
+        shoulder: landmarks[12],
+        elbow: landmarks[14],
+        wrist: landmarks[16],
+        armAngle: this.calculateArmAngle(landmarks[12], landmarks[14], landmarks[16]),
+        armHeight: 1 - landmarks[16].y,
+        shoulderHeight: 1 - landmarks[12].y
+      },
+      // Overall metrics
+      bothArmsUp: (1 - landmarks[15].y) > 0.5 && (1 - landmarks[16].y) > 0.5,
+      armsSpread: Math.abs(landmarks[15].x - landmarks[16].x),
+      shoulderWidth: Math.abs(landmarks[11].x - landmarks[12].x),
+      torsoTilt: landmarks[11].y - landmarks[12].y // positive = leaning right
+    };
+  }
+
+  calculatePalmCenter(landmarks) {
+    const indices = [0, 5, 9, 13, 17];
+    let x = 0, y = 0, z = 0;
+
+    for (const i of indices) {
+      x += landmarks[i].x;
+      y += landmarks[i].y;
+      z += landmarks[i].z;
+    }
+
+    return { x: x / 5, y: y / 5, z: z / 5 };
+  }
+
+  calculateFingerSpread(landmarks) {
+    // Distance between index and pinky tips
+    const index = landmarks[8];
+    const pinky = landmarks[20];
+    const dx = index.x - pinky.x;
+    const dy = index.y - pinky.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  calculateWristAngle(landmarks) {
+    const wrist = landmarks[0];
+    const middleMcp = landmarks[9];
+    return Math.atan2(middleMcp.y - wrist.y, middleMcp.x - wrist.x);
+  }
+
+  calculateArmAngle(shoulder, elbow, wrist) {
+    const v1 = { x: shoulder.x - elbow.x, y: shoulder.y - elbow.y };
+    const v2 = { x: wrist.x - elbow.x, y: wrist.y - elbow.y };
+
+    const dot = v1.x * v2.x + v1.y * v2.y;
+    const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+    const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+
+    return Math.acos(dot / (mag1 * mag2 + 0.0001));
+  }
+
+  stop() {
+    this.running = false;
+    if (this.videoElement.srcObject) {
+      this.videoElement.srcObject.getTracks().forEach(track => track.stop());
+    }
+  }
+}
+
+
+/**
+ * Legacy Hand Tracking Module (kept for compatibility)
  */
 
 export class HandTracker {
