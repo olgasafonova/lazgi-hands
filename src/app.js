@@ -47,6 +47,8 @@ async function init() {
   // Start tracker (this triggers camera permission)
   try {
     await tracker.start();
+    // Start with tracking disabled (learn mode is default)
+    tracker.setEnabled(false);
     document.getElementById('loading').classList.add('hidden');
     state.isLoading = false;
   } catch (err) {
@@ -160,6 +162,11 @@ function setupControls() {
     document.body.classList.remove('perform-mode');
     visualizer.setMode('learn');
 
+    // Disable tracking in learn mode (save CPU)
+    if (tracker) {
+      tracker.setEnabled(false);
+    }
+
     // Show and play the learn video
     learnVideo.classList.add('active');
     learnVideo.currentTime = 0;
@@ -181,6 +188,11 @@ function setupControls() {
     document.body.classList.add('perform-mode');
     document.body.classList.remove('learn-mode');
     visualizer.setMode('perform');
+
+    // Enable tracking in perform mode
+    if (tracker) {
+      tracker.setEnabled(true);
+    }
 
     // Hide and pause the learn video
     learnVideo.classList.remove('active');

@@ -24,6 +24,7 @@ export class HolisticTracker {
     this.videoElement = videoElement;
     this.holistic = null;
     this.running = false;
+    this.enabled = true; // Can be disabled to pause tracking
   }
 
   async start() {
@@ -67,7 +68,8 @@ export class HolisticTracker {
     if (!this.running) return;
 
     try {
-      if (this.videoElement.readyState >= 2) {
+      // Only process frames when enabled (skip in learn mode)
+      if (this.enabled && this.videoElement.readyState >= 2) {
         await this.holistic.send({ image: this.videoElement });
       }
     } catch (err) {
@@ -76,6 +78,14 @@ export class HolisticTracker {
 
     // Always continue the loop even if there's an error
     requestAnimationFrame(() => this.processFrame());
+  }
+
+  /**
+   * Enable or disable tracking (pause without stopping camera)
+   */
+  setEnabled(enabled) {
+    this.enabled = enabled;
+    console.log(`Tracking ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   processResults(results) {
