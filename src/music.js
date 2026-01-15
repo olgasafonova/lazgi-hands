@@ -271,14 +271,13 @@ export class SoundEngine {
     const droneVol = -30 + (1 - wristY) * 15; // -30 to -15 dB
     this.drone.volume.rampTo(droneVol, 0.3);
 
-    // Velocity affects tempo - more dramatic range (80-180 BPM)
-    const targetTempo = 80 + velocity * 100;
-    Tone.Transport.bpm.rampTo(targetTempo, 0.2);
-
-    // Wrist height also affects tempo (hand up = faster)
-    const heightTempo = 80 + (1 - wristY) * 80; // 80-160 based on height
-    const combinedTempo = (targetTempo + heightTempo) / 2;
-    Tone.Transport.bpm.rampTo(combinedTempo, 0.2);
+    // Only adjust tempo for synthesized sounds (not recorded music)
+    if (!this.isPlayingRecorded) {
+      const targetTempo = 80 + velocity * 100;
+      const heightTempo = 80 + (1 - wristY) * 80;
+      const combinedTempo = (targetTempo + heightTempo) / 2;
+      Tone.Transport.bpm.rampTo(combinedTempo, 0.3);
+    }
 
   }
 
