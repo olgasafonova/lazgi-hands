@@ -424,7 +424,7 @@ export class SoundEngine {
     // Create music player if not exists
     if (!this.musicPlayer) {
       this.musicPlayer = new Tone.Player({
-        url: '/assets/audio/gulsanam-lazgi.mp3',
+        url: './assets/audio/gulsanam-lazgi.mp3',
         loop: true,
         autostart: false,
         volume: -6,
