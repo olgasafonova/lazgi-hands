@@ -210,6 +210,28 @@ function setupControls() {
     }
   });
 
+  // Splash screen enter button
+  const splash = document.getElementById('splash');
+  const btnEnter = document.getElementById('btn-enter');
+
+  if (btnEnter && splash) {
+    btnEnter.addEventListener('click', () => {
+      splash.classList.add('fade-out');
+      // Remove from DOM after animation
+      setTimeout(() => {
+        splash.classList.add('hidden');
+      }, 600);
+    });
+
+    // Also allow Enter key to dismiss splash
+    document.addEventListener('keydown', function splashKey(e) {
+      if (e.key === 'Enter' && !splash.classList.contains('hidden')) {
+        btnEnter.click();
+        document.removeEventListener('keydown', splashKey);
+      }
+    });
+  }
+
   // Info modal
   const btnInfo = document.getElementById('btn-info');
   const btnCloseModal = document.getElementById('btn-close-modal');
