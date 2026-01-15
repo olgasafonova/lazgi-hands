@@ -50,14 +50,7 @@ export class Visualizer {
     this.mode = 'learn';
     this.matchScore = 0;
     this.template = null;
-    this.soundEngine = null;
-    this.eqSmoothed = new Array(50).fill(0.15);
-
     this.initP5();
-  }
-
-  setSoundEngine(engine) {
-    this.soundEngine = engine;
   }
 
   initP5() {
@@ -77,9 +70,6 @@ export class Visualizer {
 
       p.draw = () => {
         p.background(BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], 20);
-
-        // Draw equalizer at bottom
-        self.drawEqualizer();
 
         self.updateMedallions();
         self.drawMedallions();
@@ -558,83 +548,5 @@ export class Visualizer {
 
   setTemplate(template) {
     this.template = template;
-  }
-
-  drawEqualizer() {
-    if (!this.soundEngine) return;
-
-    const fftData = this.soundEngine.getFFTData();
-    if (!fftData) return;
-
-    // Dense overlapping medallions like a horizontal ikat strip
-    const medallionCount = 50;
-    const totalWidth = this.p.width + 100; // Extend past edges
-    const spacing = totalWidth / medallionCount;
-    const bottomY = this.p.height - 90;
-
-    for (let i = 0; i < medallionCount; i++) {
-      // Map to FFT bins (wrap around)
-      const fftIndex = i % 32;
-      const target = fftData[fftIndex] || 0;
-      this.eqSmoothed[i] = this.eqSmoothed[i] * 0.85 + target * 0.15;
-
-      const value = Math.max(0.15, this.eqSmoothed[i]); // Minimum size so they're always visible
-
-      // Varied sizes like v18
-      const baseWidth = 50 + value * 60 + Math.sin(i * 0.7) * 15;
-      const ratio = 2 + value + Math.sin(i * 1.3) * 0.5;
-      const baseHeight = baseWidth * ratio;
-
-      // Position - tight spacing with random offset like mouse drawing
-      const x = -50 + i * spacing + Math.sin(i * 2.1) * 8;
-      const y = bottomY + Math.sin(i * 1.7) * 10;
-
-      // Pick colors cycling through palette
-      const color1 = IKAT_COLORS[i % IKAT_COLORS.length];
-      const color2 = IKAT_COLORS[(i + 4) % IKAT_COLORS.length];
-
-      const alpha = 180 + value * 75;
-      const wobbleAmt = 2 + value * 4;
-      const seed = i * 73.7; // Fixed seed per medallion for stability
-
-      // Number of layers varies
-      const numLayers = 2 + Math.floor(value * 2);
-      const hasBlur = (i % 3 === 0) && value > 0.2;
-      const hasCenter = value > 0.4 && (i % 5 === 0);
-
-      this.p.push();
-      this.p.translate(x, y);
-
-      // Draw layers from outside in
-      for (let layer = 0; layer < numLayers; layer++) {
-        const layerScale = 1 - layer * 0.25;
-        const layerColor = layer === 0 ? color1 : color2;
-        const layerAlpha = alpha * (1 - layer * 0.15);
-        const w = baseWidth * layerScale;
-        const h = baseHeight * layerScale;
-
-        if (hasBlur && layer === 0) {
-          this.drawBlurredWobblyMedallion(0, 0, w, h, layerColor, layerAlpha * 0.7, 5, wobbleAmt, seed + layer * 20);
-        } else {
-          this.drawWobblyMedallion(0, 0, w, h, layerColor, layerAlpha, wobbleAmt, seed + layer * 20);
-        }
-      }
-
-      // Center diamond
-      if (hasCenter) {
-        const innermost = baseWidth * (1 - (numLayers - 1) * 0.25);
-        this.p.fill(CREAM[0], CREAM[1], CREAM[2], alpha * 0.9);
-        const cw = innermost * 0.3;
-        const ch = baseHeight * 0.08;
-        this.p.beginShape();
-        this.p.vertex(0, -ch / 2);
-        this.p.vertex(cw / 2, 0);
-        this.p.vertex(0, ch / 2);
-        this.p.vertex(-cw / 2, 0);
-        this.p.endShape(this.p.CLOSE);
-      }
-
-      this.p.pop();
-    }
   }
 }

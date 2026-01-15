@@ -38,9 +38,6 @@ async function init() {
     }
   });
 
-  // Connect sound engine to visualizer for equalizer
-  visualizer.setSoundEngine(soundEngine);
-
   // Setup holistic tracker (hands + pose combined)
   tracker = new HolisticTracker({
     onResults: handleTrackingResults,
