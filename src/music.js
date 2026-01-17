@@ -406,44 +406,38 @@ export class SoundEngine {
   /**
    * Load and play Lazgi music
    * Source: Gulsanam Mamazoitova - Lazgi
+   * Uses HTML5 Audio for stability with screen recording
    */
   async playRecordedMusic() {
-    await Tone.start();
-
     // Already playing, don't restart
     if (this.isPlayingRecorded) {
       return;
     }
 
-    // Setup FFT if not exists (for visualization)
-    if (!this.fft) {
-      this.fft = new Tone.FFT(64);
-    }
-
-    // Create music player if not exists
+    // Create HTML5 audio element if not exists (more stable than Tone.Player)
     if (!this.musicPlayer) {
-      this.musicPlayer = new Tone.Player({
-        url: './assets/audio/gulsanam-lazgi.mp3',
-        loop: true,
-        autostart: false,
-        volume: -6,
-        onload: () => {
-          console.log('Lazgi music loaded');
-        }
-      }).toDestination();
-
-      this.musicPlayer.connect(this.fft);
+      this.musicPlayer = new Audio('./assets/audio/gulsanam-lazgi.mp3');
+      this.musicPlayer.loop = true;
+      this.musicPlayer.volume = 0.5;
+      this.musicPlayer.playbackRate = 1.0;
+      this.musicPlayer.addEventListener('canplaythrough', () => {
+        console.log('Lazgi music loaded');
+      });
     }
 
-    await Tone.loaded();
-    this.musicPlayer.start();
+    // Ensure playback rate is always 1.0
+    this.musicPlayer.playbackRate = 1.0;
+    await this.musicPlayer.play();
     this.isPlayingRecorded = true;
     console.log('Playing Gulsanam Mamazoitova - Lazgi');
   }
 
   stopRecordedMusic() {
     if (this.isPlayingRecorded) {
-      if (this.musicPlayer) this.musicPlayer.stop();
+      if (this.musicPlayer) {
+        this.musicPlayer.pause();
+        this.musicPlayer.currentTime = 0;
+      }
       this.isPlayingRecorded = false;
       console.log('Stopped Lazgi music');
     }
