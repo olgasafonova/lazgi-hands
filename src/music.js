@@ -414,12 +414,16 @@ export class SoundEngine {
       return;
     }
 
-    // Create HTML5 audio element if not exists (more stable than Tone.Player)
+    // Create hidden video element for audio (Descript captures video audio better than <audio>)
     if (!this.musicPlayer) {
-      this.musicPlayer = new Audio('./assets/audio/gulsanam-lazgi.mp3');
+      this.musicPlayer = document.createElement('video');
+      this.musicPlayer.src = './assets/video/gulsanam-lazgi.mp4';
       this.musicPlayer.loop = true;
       this.musicPlayer.volume = 0.5;
       this.musicPlayer.playbackRate = 1.0;
+      this.musicPlayer.style.display = 'none';
+      this.musicPlayer.playsInline = true;
+      document.body.appendChild(this.musicPlayer);
       this.musicPlayer.addEventListener('canplaythrough', () => {
         console.log('Lazgi music loaded');
       });
