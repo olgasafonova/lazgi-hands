@@ -417,7 +417,7 @@ export class SoundEngine {
     // Create hidden video element for audio (Descript captures video audio better than <audio>)
     if (!this.musicPlayer) {
       this.musicPlayer = document.createElement('video');
-      this.musicPlayer.src = './assets/video/gulsanam-lazgi.mp4';
+      this.musicPlayer.src = './assets/video/gulsanam-perform.mp4';
       this.musicPlayer.loop = true;
       this.musicPlayer.volume = 0.5;
       this.musicPlayer.playbackRate = 1.0;
